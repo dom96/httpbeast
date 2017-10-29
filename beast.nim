@@ -6,9 +6,12 @@ type
   Data = object
     isServer: bool
     sendQueue: string
+    bytesSent: int
 
 proc initData(isServer: bool): Data =
-  Data(isServer: isServer, sendQueue: "")
+  Data(isServer: isServer,
+       sendQueue: "HTTP/1.1 200 OK\c\LContent-Length: 11\c\L\c\LHello World",
+       bytesSent: 0)
 
 proc processEvents(selector: Selector[Data],
                    events: array[64, ReadyKey], count: int) =
@@ -51,9 +54,6 @@ proc processEvents(selector: Selector[Data],
 
           if buf[ret-1] == '\l' and buf[ret-2] == '\c':
             # Request finished.
-            selector.withData(fd, value) do:
-              value.sendQueue =
-                "HTTP/1.1 200 OK\c\LContent-Length: 11\c\L\c\LHello World"
             selector.updateHandle(fd.SocketHandle,
                                   {Event.Read, Event.Write})
 
@@ -62,9 +62,11 @@ proc processEvents(selector: Selector[Data],
             break
       elif Event.Write in events[i].events:
         assert data.sendQueue.len > 0
+        assert data.bytesSent < data.sendQueue.len
         # Write the sendQueue.
-        let ret = send(fd.SocketHandle, addr data.sendQueue[0],
-                       data.sendQueue.len, 0)
+        let leftover = data.sendQueue.len-data.bytesSent
+        let ret = send(fd.SocketHandle, addr data.sendQueue[data.bytesSent],
+                       leftover, 0)
         if ret == -1:
           # Error!
           let lastError = osLastError()
@@ -72,13 +74,14 @@ proc processEvents(selector: Selector[Data],
             break
           raiseOSError(lastError)
 
-        # TODO: Optimise
-        data.sendQueue = data.sendQueue[ret .. ^1]
-        doAssert selector.setData(fd, data)
+        data.bytesSent.inc(ret)
 
-        if data.sendQueue.len == 0:
+        if data.sendQueue.len == data.bytesSent:
+          data.bytesSent = 0
           selector.updateHandle(fd.SocketHandle,
                                 {Event.Read})
+
+        doAssert selector.setData(fd, data)
       else:
         assert false
 
