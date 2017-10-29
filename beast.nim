@@ -1,5 +1,7 @@
 import selectors, net, nativesockets, os
 
+from osproc import countProcessors
+
 import times # TODO this shouldn't be required. Nim bug?
 
 type
@@ -21,6 +23,9 @@ proc processEvents(selector: Selector[Data],
     if data.isServer:
       if Event.Read in events[i].events:
         let (client, address) = fd.SocketHandle.accept()
+        if client == osInvalidSocket:
+          let lastError = osLastError()
+          raiseOSError(lastError)
         setBlocking(client, false)
         selector.registerHandle(client, {Event.Read},
                                 initData(false))
@@ -85,11 +90,12 @@ proc processEvents(selector: Selector[Data],
       else:
         assert false
 
-proc main() =
+proc eventLoop() =
   let selector = newSelector[Data]()
 
   let server = newSocket()
   server.setSockOpt(OptReuseAddr, true)
+  server.setSockOpt(OptReusePort, true)
   server.bindAddr(Port(8080))
   server.listen()
   server.getFd().setBlocking(false)
@@ -100,4 +106,12 @@ proc main() =
     let ret = selector.selectInto(-1, events)
     processEvents(selector, events, ret)
 
-main()
+let cores = countProcessors()
+if cores > 1:
+  echo("Starting ", cores, " threads")
+  var threads = newSeq[Thread[void]](cores)
+  for i in 0 .. <cores:
+    createThread[void](threads[i], eventLoop)
+  joinThreads(threads)
+else:
+  eventLoop()
