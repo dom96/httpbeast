@@ -44,12 +44,14 @@ template handleAccept() =
 
 template handleClientClosure(selector: Selector[Data],
                              fd: SocketHandle|int,
-                             doBreak=true) =
+                             inLoop=true) =
   # TODO: Logging that the socket was closed.
   selector.unregister(fd)
   fd.SocketHandle.close()
-  when doBreak:
+  when inLoop:
     break
+  else:
+    return
 
 proc processEvents(selector: Selector[Data],
                    events: array[64, ReadyKey], count: int,
