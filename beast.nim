@@ -42,11 +42,14 @@ template handleAccept() =
   selector.registerHandle(client, {Event.Read},
                           initData(false))
 
-template handleClientClosure() =
+template handleClientClosure(selector: Selector[Data],
+                             fd: SocketHandle|int,
+                             doBreak=true) =
   # TODO: Logging that the socket was closed.
   selector.unregister(fd)
   fd.SocketHandle.close()
-  break
+  when doBreak:
+    break
 
 proc processEvents(selector: Selector[Data],
                    events: array[64, ReadyKey], count: int,
@@ -68,7 +71,7 @@ proc processEvents(selector: Selector[Data],
         while true:
           let ret = recv(fd.SocketHandle, addr buf[0], size, 0.cint)
           if ret == 0:
-            handleClientClosure()
+            handleClientClosure(selector, fd)
 
           if ret == -1:
             # Error!
@@ -76,7 +79,7 @@ proc processEvents(selector: Selector[Data],
             if lastError.int32 in {EWOULDBLOCK, EAGAIN}:
               break
             if isDisconnectionError({SocketFlag.SafeDisconn}, lastError):
-              handleClientClosure()
+              handleClientClosure(selector, fd)
             raiseOSError(lastError)
 
           # Write buffer to our data.
@@ -107,7 +110,7 @@ proc processEvents(selector: Selector[Data],
           if lastError.int32 in {EWOULDBLOCK, EAGAIN}:
             break
           if isDisconnectionError({SocketFlag.SafeDisconn}, lastError):
-            handleClientClosure()
+            handleClientClosure(selector, fd)
           raiseOSError(lastError)
 
         data.bytesSent.inc(ret)
@@ -144,12 +147,32 @@ proc reqMethod*(req: Request): HttpMethod =
   # fdData.
 
 proc send*(req: Request, body: string) =
-  template data: var Data = req.selector.getData(req.client)
-  assert data.headersFinished
-  data.sendQueue.add(
-    "HTTP/1.1 200 OK\c\LContent-Length: $1\c\L\c\L$2" % [$body.len, body]
-  )
-  req.selector.updateHandle(req.client, {Event.Read, Event.Write})
+  template getData: var Data = req.selector.getData(req.client)
+  assert getData.headersFinished
+
+  var
+    text = "HTTP/1.1 200 OK\c\LContent-Length: $1\c\L\c\L$2" %
+           [$body.len, body]
+
+  if getData.sendQueue.len == 0:
+    # Try sending some immediately.
+    let ret = send(req.client, addr text[0], text.len, 0)
+    if ret == -1:
+      # Error!
+      let lastError = osLastError()
+      if isDisconnectionError({SocketFlag.SafeDisconn}, lastError):
+        handleClientClosure(req.selector, req.client, false)
+      if lastError.int32 notin {EWOULDBLOCK, EAGAIN}:
+        raiseOSError(lastError)
+
+    if ret != text.len:
+      getData.sendQueue.add(text)
+      getData.bytesSent = ret
+      req.selector.updateHandle(req.client, {Event.Read, Event.Write})
+
+  else:
+    getData.sendQueue.add(text)
+    req.selector.updateHandle(req.client, {Event.Read, Event.Write})
 
 proc run*(onRequest: OnRequest) =
   let cores = countProcessors()
