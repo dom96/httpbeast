@@ -69,7 +69,10 @@ proc processEvents(selector: Selector[Data],
         assert data.sendQueue.len == 0
         const size = 256
         var buf: array[size, char]
-        # Read until EAGAIN. Hacky, but should work :)
+        # Read until EAGAIN. We take advantage of the fact that the client
+        # will wait for a response after they send a request. So we can
+        # comfortably continue reading until the message ends with \c\l
+        # \c\l.
         while true:
           let ret = recv(fd.SocketHandle, addr buf[0], size, 0.cint)
           if ret == 0:
@@ -87,7 +90,8 @@ proc processEvents(selector: Selector[Data],
           # Write buffer to our data.
           data.data.add(addr(buf[0]))
 
-          if buf[ret-1] == '\l' and buf[ret-2] == '\c':
+          if buf[ret-1] == '\l' and buf[ret-2] == '\c' and
+             buf[ret-3] == '\l' and buf[ret-4] == '\c':
             # First line and headers for request received.
             # TODO: For now we only support GET requests.
             # TODO: Check for POST and Content-Length in the most
