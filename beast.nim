@@ -149,9 +149,15 @@ proc reqMethod*(req: Request): HttpMethod =
   # fdData.
 
 proc send*(req: Request, body: string) =
-  template getData: var Data = req.selector.getData(req.client)
-  assert getData.headersFinished
+  ## Sends a HTTP 200 OK response with the specified body.
+  ##
+  ## **Warning:** This can only be called once in the OnRequest callback.
 
+  # TODO: Reduce the amount of `getData` accesses.
+  template getData: var Data = req.selector.getData(req.client)
+  assert getData.headersFinished, "Selector not ready to send."
+
+  getData.headersFinished = false
   var
     text = "HTTP/1.1 200 OK\c\LContent-Length: $1\c\L\c\L$2" %
            [$body.len, body]
