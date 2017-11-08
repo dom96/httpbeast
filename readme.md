@@ -22,3 +22,20 @@ The reasoning for this is to give me an idea of the top performance I can
 potentially get out of this code. Obviously my goal is to turn this into a
 proper HTTP server without sacrificing any performance, but doing so is
 likely impossible so I will settle for sacrificing as little as possible.
+
+## How does wrk work?
+
+(or appear to work?)
+
+wrk seems to simply write the following as fast as possible
+
+```
+GET / HTTP/1.1
+Host: <ip>:<port>
+```
+
+And at the same time read from each client as quickly as possible and count
+the number of requests.
+
+Strangely, writing multiple responses really quickly (faster than the
+requests even come in) increases the requests/sec A LOT.
