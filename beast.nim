@@ -67,6 +67,13 @@ proc processEvents(selector: Selector[Data],
   for i in 0 .. <count:
     let fd = events[i].fd
     template data: var Data = selector.getData(fd)
+    # Handle error events first.
+    if Event.Error in events[i].events:
+      if isDisconnectionError({SocketFlag.SafeDisconn},
+                              events[i].errorCode):
+        handleClientClosure(selector, fd)
+      raiseOSError(events[i].errorCode)
+
     if data.isServer:
       if Event.Read in events[i].events:
         handleAccept()
