@@ -1,4 +1,5 @@
 import selectors, net, nativesockets, os, httpcore, asyncdispatch, strutils
+import options
 
 from osproc import countProcessors
 
@@ -7,6 +8,10 @@ import times # TODO this shouldn't be required. Nim bug?
 export httpcore.HttpMethod
 
 type
+  Cache = object
+    data: string
+    response: string
+
   Data = object
     isServer: bool ## Determines whether FD is the server listening socket.
     ## A queue of data that needs to be sent when the FD becomes writeable.
@@ -17,6 +22,8 @@ type
     data: string
     ## Determines whether `data` contains "\c\l\c\l"
     headersFinished: bool
+    ## A cache of the previous request.
+    cache: Option[Cache]
 
 type
   Request* = object
@@ -30,7 +37,8 @@ proc initData(isServer: bool): Data =
        sendQueue: "",
        bytesSent: 0,
        data: "",
-       headersFinished: false
+       headersFinished: false,
+       cache: none(Cache)
       )
 
 template handleAccept() =
@@ -98,7 +106,21 @@ proc processEvents(selector: Selector[Data],
             # TODO: optimised way possible!
             data.headersFinished = true
             assert data.sendQueue.len == 0
-            onRequest(Request(selector: selector, client: fd.SocketHandle))
+            assert data.bytesSent == 0
+            # Check cache.
+            let cache = data.cache
+            if cache.isSome() and cache.get().data == data.data:
+              # Reply with the cached response.
+              data.sendQueue = cache.get().response
+            else:
+              onRequest(
+                Request(selector: selector, client: fd.SocketHandle)
+              )
+              # Save cache.
+              # TODO: Register a timer to expire the cache.
+              data.cache = some(
+                Cache(data: data.data, response: data.sendQueue)
+              )
 
           if ret != size:
             # Assume there is nothing else for us and break.
