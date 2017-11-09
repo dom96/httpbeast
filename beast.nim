@@ -166,25 +166,8 @@ proc send*(req: Request, body: string) =
     text = "HTTP/1.1 200 OK\c\LContent-Length: $1\c\L\c\L$2" %
            [$body.len, body]
 
-  if getData.sendQueue.len == 0:
-    # Try sending some immediately.
-    let ret = send(req.client, addr text[0], text.len, 0)
-    if ret == -1:
-      # Error!
-      let lastError = osLastError()
-      if isDisconnectionError({SocketFlag.SafeDisconn}, lastError):
-        handleClientClosure(req.selector, req.client, false)
-      if lastError.int32 notin {EWOULDBLOCK, EAGAIN}:
-        raiseOSError(lastError)
-
-    if ret != text.len:
-      getData.sendQueue.add(text)
-      getData.bytesSent = ret
-      req.selector.updateHandle(req.client, {Event.Read, Event.Write})
-
-  else:
-    getData.sendQueue.add(text)
-    req.selector.updateHandle(req.client, {Event.Read, Event.Write})
+  getData.sendQueue.add(text)
+  req.selector.updateHandle(req.client, {Event.Read, Event.Write})
 
 proc run*(onRequest: OnRequest) =
   let cores = countProcessors()
