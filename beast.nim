@@ -112,6 +112,8 @@ proc processEvents(selector: Selector[Data],
             if cache.isSome() and cache.get().data == data.data:
               # Reply with the cached response.
               data.sendQueue = cache.get().response
+              selector.updateHandle(fd.SocketHandle,
+                                    {Event.Read, Event.Write})
             else:
               onRequest(
                 Request(selector: selector, client: fd.SocketHandle)
@@ -146,6 +148,7 @@ proc processEvents(selector: Selector[Data],
         if data.sendQueue.len == data.bytesSent:
           data.bytesSent = 0
           data.sendQueue.setLen(0)
+          data.data.setLen(0)
           selector.updateHandle(fd.SocketHandle,
                                 {Event.Read})
       else:
