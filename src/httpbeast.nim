@@ -5,7 +5,7 @@ from osproc import countProcessors
 
 import times # TODO this shouldn't be required. Nim bug?
 
-export httpcore.HttpMethod
+export httpcore
 
 import httpbeast/parser
 
@@ -215,9 +215,13 @@ proc send*(req: Request, body: string) {.inline.} =
   ## **Warning:** This can only be called once in the OnRequest callback.
   req.send(Http200, body)
 
-proc reqMethod*(req: Request): Option[HttpMethod] {.inline.} =
+proc httpMethod*(req: Request): Option[HttpMethod] {.inline.} =
   ## Parses the request's data to find the request HttpMethod.
-  reqMethod(req.selector.getData(req.client).data)
+  parseHttpMethod(req.selector.getData(req.client).data)
+
+proc path*(req: Request): Option[string] {.inline.} =
+  ## Parses the request's data to find the request target.
+  parsePath(req.selector.getData(req.client).data)
 
 proc validateRequest(req: Request): bool =
   ## Handles protocol-mandated responses.
@@ -229,7 +233,7 @@ proc validateRequest(req: Request): bool =
   # that is unrecognized or not implemented by an origin server, the
   # origin server SHOULD respond with the 501 (Not Implemented) status
   # code."
-  if req.reqMethod().isNone():
+  if req.httpMethod().isNone():
     req.send(Http501)
     return false
 

@@ -3,7 +3,11 @@ import options
 import httpbeast
 
 proc onRequest(req: Request) =
-  if req.reqMethod == some(HttpGet):
-    req.send("Hello World")
+  if req.httpMethod == some(HttpGet):
+    case req.path.get()
+    of "/":
+      req.send("Hello World")
+    else:
+      req.send(Http404)
 
 run(onRequest)
