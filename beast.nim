@@ -7,6 +7,8 @@ import times # TODO this shouldn't be required. Nim bug?
 
 export httpcore.HttpMethod
 
+import parser
+
 type
   Cache = object
     data: string
@@ -61,6 +63,7 @@ template handleClientClosure(selector: Selector[Data],
   else:
     return
 
+proc validateRequest(req: Request): bool {.gcsafe.}
 proc processEvents(selector: Selector[Data],
                    events: array[64, ReadyKey], count: int,
                    onRequest: OnRequest) =
@@ -122,9 +125,14 @@ proc processEvents(selector: Selector[Data],
               selector.updateHandle(fd.SocketHandle,
                                     {Event.Read, Event.Write})
             else:
-              onRequest(
-                Request(selector: selector, client: fd.SocketHandle)
+              let request = Request(
+                selector: selector,
+                client: fd.SocketHandle
               )
+
+              if validateRequest(request):
+                onRequest(request)
+
               # Save cache.
               # TODO: Register a timer to expire the cache.
               data.cache = some(
@@ -179,13 +187,8 @@ proc eventLoop(onRequest: OnRequest) =
 
 #[ API start ]#
 
-proc reqMethod*(req: Request): HttpMethod =
-  ## Parses the request's data to find the HttpMethod.
-  let fdData = req.selector.getData(req.client)
-  # fdData.
-
-proc send*(req: Request, body: string) =
-  ## Sends a HTTP 200 OK response with the specified body.
+proc send*(req: Request, code: HttpCode, body: string) =
+  ## Responds with the specified HttpCode and body.
   ##
   ## **Warning:** This can only be called once in the OnRequest callback.
 
@@ -195,11 +198,40 @@ proc send*(req: Request, body: string) =
 
   getData.headersFinished = false
   var
-    text = "HTTP/1.1 200 OK\c\LContent-Length: $1\c\L\c\L$2" %
-           [$body.len, body]
+    text = "HTTP/1.1 $1\c\LContent-Length: $2\c\L\c\L$3" %
+           [$code, $body.len, body]
 
   getData.sendQueue.add(text)
   req.selector.updateHandle(req.client, {Event.Read, Event.Write})
+
+proc send*(req: Request, code: HttpCode) =
+  ## Responds with the specified HttpCode. The body of the response
+  ## is the same as the HttpCode description.
+  req.send(code, $code)
+
+proc send*(req: Request, body: string) {.inline.} =
+  ## Sends a HTTP 200 OK response with the specified body.
+  ##
+  ## **Warning:** This can only be called once in the OnRequest callback.
+  req.send(Http200, body)
+
+proc reqMethod*(req: Request): Option[HttpMethod] {.inline.} =
+  ## Parses the request's data to find the request HttpMethod.
+  reqMethod(req.selector.getData(req.client).data)
+
+proc validateRequest(req: Request): bool =
+  ## Handles protocol-mandated responses.
+  ##
+  ## Returns ``false`` when the request has been handled.
+  result = true
+
+  # From RFC7231: "When a request method is received
+  # that is unrecognized or not implemented by an origin server, the
+  # origin server SHOULD respond with the 501 (Not Implemented) status
+  # code."
+  if req.reqMethod().isNone():
+    req.send(Http501)
+    return false
 
 proc run*(onRequest: OnRequest) =
   let cores = countProcessors()
@@ -214,6 +246,7 @@ proc run*(onRequest: OnRequest) =
 
 when isMainModule:
   proc onRequest(req: Request) =
-    req.send("Hello World")
+    if req.reqMethod == some(HttpGet):
+      req.send("Hello World")
 
   run(onRequest)

@@ -39,3 +39,8 @@ the number of requests.
 
 Strangely, writing multiple responses really quickly (faster than the
 requests even come in) increases the requests/sec A LOT.
+
+## References
+
+- https://tools.ietf.org/html/rfc7230
+- https://tools.ietf.org/html/rfc7231
