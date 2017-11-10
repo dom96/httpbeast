@@ -7,7 +7,7 @@ import times # TODO this shouldn't be required. Nim bug?
 
 export httpcore.HttpMethod
 
-import parser
+import httpbeast/parser
 
 type
   Cache = object
@@ -243,10 +243,3 @@ proc run*(onRequest: OnRequest) =
     joinThreads(threads)
   else:
     eventLoop(onRequest)
-
-when isMainModule:
-  proc onRequest(req: Request) =
-    if req.reqMethod == some(HttpGet):
-      req.send("Hello World")
-
-  run(onRequest)
