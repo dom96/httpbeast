@@ -1,8 +1,8 @@
-import options
+import options, asyncdispatch
 
 import httpbeast
 
-proc onRequest(req: Request) =
+proc onRequest(req: Request): Future[void] =
   if req.httpMethod == some(HttpGet):
     case req.path.get()
     of "/":

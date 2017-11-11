@@ -1,5 +1,5 @@
 import selectors, net, nativesockets, os, httpcore, asyncdispatch, strutils
-import options
+import options, future
 
 from osproc import countProcessors
 
@@ -14,8 +14,11 @@ type
     data: string
     response: string
 
+  FdKind = enum
+    Server, Client, Dispatcher
+
   Data = object
-    isServer: bool ## Determines whether FD is the server listening socket.
+    fdKind: FdKind ## Determines the fd kind (server, client, dispatcher)
     ## A queue of data that needs to be sent when the FD becomes writeable.
     sendQueue: string
     ## The number of characters in `sendQueue` that have been sent already.
@@ -32,10 +35,10 @@ type
     selector: Selector[Data]
     client: SocketHandle
 
-  OnRequest* = proc (req: Request) {.gcsafe.}
+  OnRequest* = proc (req: Request): Future[void] {.gcsafe.}
 
-proc initData(isServer: bool): Data =
-  Data(isServer: isServer,
+proc initData(fdKind: FdKind): Data =
+  Data(fdKind: fdKind,
        sendQueue: "",
        bytesSent: 0,
        data: "",
@@ -50,7 +53,7 @@ template handleAccept() =
     raiseOSError(lastError)
   setBlocking(client, false)
   selector.registerHandle(client, {Event.Read},
-                          initData(false))
+                          initData(Client))
 
 template handleClientClosure(selector: Selector[Data],
                              fd: SocketHandle|int,
@@ -63,13 +66,33 @@ template handleClientClosure(selector: Selector[Data],
   else:
     return
 
+proc saveCache(selector: Selector[Data], fd: int, lenient: bool) =
+  # Save cache.
+  # TODO: Register a timer to expire the cache.
+  var data: ptr Data = addr(selector.getData(fd))
+  if lenient and data.sendQueue.len == 0:
+    # The send queue has been sent before we had a chance to capture it.
+    return
+
+  assert data.sendQueue.len > 0
+  data.cache = some(
+    Cache(data: data.data, response: data.sendQueue)
+  )
+
+proc onRequestFutureComplete(theFut: Future[void],
+                             selector: Selector[Data], fd: int) =
+  if theFut.failed:
+    raise theFut.error
+  else:
+    saveCache(selector, fd, lenient=true)
+
 proc validateRequest(req: Request): bool {.gcsafe.}
 proc processEvents(selector: Selector[Data],
                    events: array[64, ReadyKey], count: int,
                    onRequest: OnRequest) =
   for i in 0 .. <count:
     let fd = events[i].fd
-    template data: var Data = selector.getData(fd)
+    var data: ptr Data = addr(selector.getData(fd))
     # Handle error events first.
     if Event.Error in events[i].events:
       if isDisconnectionError({SocketFlag.SafeDisconn},
@@ -77,12 +100,17 @@ proc processEvents(selector: Selector[Data],
         handleClientClosure(selector, fd)
       raiseOSError(events[i].errorCode)
 
-    if data.isServer:
+    case data.fdKind
+    of Server:
       if Event.Read in events[i].events:
         handleAccept()
       else:
         assert false, "Only Read events are expected for the server"
-    else:
+    of Dispatcher:
+      # Run the dispatcher loop.
+      assert events[i].events == {Event.Read}
+      asyncdispatch.poll(0)
+    of Client:
       if Event.Read in events[i].events:
         assert data.sendQueue.len == 0
         const size = 256
@@ -108,8 +136,8 @@ proc processEvents(selector: Selector[Data],
           # Write buffer to our data.
           data.data.add(addr(buf[0]))
 
-          if buf[ret-1] == '\l' and buf[ret-2] == '\c' and
-             buf[ret-3] == '\l' and buf[ret-4] == '\c':
+          if data.data[^1] == '\l' and data.data[^2] == '\c' and
+             data.data[^3] == '\l' and data.data[^4] == '\c':
             # First line and headers for request received.
             # TODO: For now we only support GET requests.
             # TODO: Check for POST and Content-Length in the most
@@ -121,6 +149,7 @@ proc processEvents(selector: Selector[Data],
             let cache = data.cache
             if cache.isSome() and cache.get().data == data.data:
               # Reply with the cached response.
+              assert cache.get().response.len > 0
               data.sendQueue = cache.get().response
               selector.updateHandle(fd.SocketHandle,
                                     {Event.Read, Event.Write})
@@ -130,14 +159,17 @@ proc processEvents(selector: Selector[Data],
                 client: fd.SocketHandle
               )
 
+              var cacheHandled = false
               if validateRequest(request):
-                onRequest(request)
+                let fut = onRequest(request)
+                if not fut.isNil:
+                  cacheHandled = true
+                  fut.callback =
+                    (theFut: Future[void]) =>
+                      (onRequestFutureComplete(theFut, selector, fd))
 
-              # Save cache.
-              # TODO: Register a timer to expire the cache.
-              data.cache = some(
-                Cache(data: data.data, response: data.sendQueue)
-              )
+              if not cacheHandled:
+                saveCache(selector, fd, lenient=false)
 
           if ret != size:
             # Assume there is nothing else for us and break.
@@ -178,7 +210,11 @@ proc eventLoop(onRequest: OnRequest) =
   server.bindAddr(Port(8080))
   server.listen()
   server.getFd().setBlocking(false)
-  selector.registerHandle(server.getFd(), {Event.Read}, initData(true))
+  selector.registerHandle(server.getFd(), {Event.Read}, initData(Server))
+
+  let disp = getGlobalDispatcher()
+  selector.registerHandle(getIoHandler(disp).getFd(), {Event.Read},
+                          initData(Dispatcher))
 
   var events: array[64, ReadyKey]
   while true:
@@ -238,6 +274,11 @@ proc validateRequest(req: Request): bool =
     return false
 
 proc run*(onRequest: OnRequest) =
+  ## Starts the HTTP server and calls `onRequest` for each request.
+  ##
+  ## The ``onRequest`` procedure returns a ``Future[void]`` type. But
+  ## unlike most asynchronous procedures in Nim, it can return ``nil``
+  ## for better performance, when no async operations are needed.
   let cores = countProcessors()
   if cores > 1:
     echo("Starting ", cores, " threads")

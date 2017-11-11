@@ -10,4 +10,7 @@ license       = "MIT"
 requires "nim >= 0.17.3"
 
 task helloworld, "Compiles and executes the hello world server.":
-  exec "nim c -d:release -r tests/helloworld"
+  exec "nim c -d:release --gc:boehm -r tests/helloworld"
+
+task dispatcher, "Compiles and executes the dispatcher test server.":
+  exec "nim c -d:release -r tests/dispatcher"
