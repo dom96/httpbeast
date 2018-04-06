@@ -5,6 +5,38 @@ Extremely fast HTTP responses in Nim.
 This is an experimental project to get the fastest possible HTTP server written
 in pure Nim.
 
+## Benchmarking
+
+Plan is to benchmark against:
+
+* tokio-minihttp (shamelessly stolen from TechEmpower benchmarks)
+* simple Go hello world
+* cpoll_cppsp (shamelessly stolen from TechEmpower benchmarks)
+
+### Preparations
+
+On both the client and server:
+
+```
+sysctl -w fs.file-max=100000
+ulimit -n 10000
+```
+
+### Compiler versions
+
+```
+
+```
+
+### Servers
+
+- 1 DigitalOcean High CPU Droplet with 8 CPUs
+  - Used to run the HTTP servers
+- 1 DigitalOcean High CPU Droplet with 8 CPUs
+  - Used to run ``wrk``
+
+Both droplets are on the same private network.
+
 ## First phase
 
 The first phase is to build an HTTP server that cheats to get as many req/s as

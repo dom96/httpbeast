@@ -5,6 +5,8 @@ author        = "Dominik Picheta"
 description   = "A super-fast epoll-backed and parallel HTTP server."
 license       = "MIT"
 
+srcDir = "src"
+
 # Dependencies
 
 requires "nim >= 0.17.3"

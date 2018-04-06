@@ -90,7 +90,7 @@ proc validateRequest(req: Request): bool {.gcsafe.}
 proc processEvents(selector: Selector[Data],
                    events: array[64, ReadyKey], count: int,
                    onRequest: OnRequest) =
-  for i in 0 .. <count:
+  for i in 0 ..< count:
     let fd = events[i].fd
     var data: ptr Data = addr(selector.getData(fd))
     # Handle error events first.
@@ -283,7 +283,7 @@ proc run*(onRequest: OnRequest) =
   if cores > 1:
     echo("Starting ", cores, " threads")
     var threads = newSeq[Thread[OnRequest]](cores)
-    for i in 0 .. <cores:
+    for i in 0 ..< cores:
       createThread[OnRequest](threads[i], eventLoop, onRequest)
     joinThreads(threads)
   else:

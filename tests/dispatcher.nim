@@ -6,7 +6,6 @@ proc onRequest(req: Request) {.async.} =
   if req.httpMethod == some(HttpGet):
     case req.path.get()
     of "/":
-      echo("Hello")
       var client = newAsyncHttpClient()
       let content = await client.getContent("http://localhost:8080/content")
       req.send($content)
