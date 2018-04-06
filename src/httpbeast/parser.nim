@@ -12,6 +12,11 @@ proc parseHttpMethod*(data: string): Option[HttpMethod] =
   of 'H':
     if data[1] == 'E' and data[2] == 'A' and data[3] == 'D':
       return some(HttpHead)
+  of 'P':
+    if data[1] == 'O' and data[2] == 'S' and data[3] == 'T':
+      return some(HttpPost)
+    if data[1] == 'U' and data[2] == 'T':
+      return some(HttpPut)
   else: discard
 
   return none(HttpMethod)
@@ -35,3 +40,44 @@ proc parsePath*(data: string): Option[string] =
       return some(data[start..<i])
   else:
     return none(string)
+
+proc parseHeaders*(data: string): Option[HttpHeaders] =
+  var pairs: seq[(string, string)] = @[]
+
+  var i = 0
+  # Skip first line containing the method, path and HTTP version.
+  while data[i] != '\l': i.inc
+
+  i.inc # Skip \l
+
+  var value = false
+  var current: (string, string) = ("", "")
+  while i < data.len:
+    case data[i]
+    of ':':
+      if value: current[1].add(':')
+      value = true
+    of ' ':
+      if value:
+        if current[1].len != 0:
+          current[1].add(data[i])
+      else:
+        current[0].add(data[i])
+    of '\c':
+      discard
+    of '\l':
+      if current[0].len == 0:
+        # End of headers.
+        return some(newHttpHeaders(pairs))
+
+      pairs.add(current)
+      value = false
+      current = ("", "")
+    else:
+      if value:
+        current[1].add(data[i])
+      else:
+        current[0].add(data[i])
+    i.inc()
+
+  return none(HttpHeaders)

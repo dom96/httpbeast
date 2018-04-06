@@ -1,4 +1,5 @@
 import selectors, net, nativesockets, os, httpcore, asyncdispatch, strutils
+import parseutils
 import options, future
 
 from osproc import countProcessors
@@ -21,8 +22,10 @@ type
     bytesSent: int
     ## Big chunk of data read from client during request.
     data: string
-    ## Determines whether `data` contains "\c\l\c\l"
+    ## Determines whether `data` contains "\c\l\c\l".
     headersFinished: bool
+    ## Determines position of the end of "\c\l\c\l".
+    headersFinishPos: int
 
 type
   Request* = object
@@ -39,7 +42,8 @@ proc initData(fdKind: FdKind): Data =
        sendQueue: "",
        bytesSent: 0,
        data: "",
-       headersFinished: false
+       headersFinished: false,
+       headersFinishPos: -1, ## By default we assume the fast case: end of data.
       )
 
 template handleAccept() =
@@ -55,6 +59,9 @@ template handleClientClosure(selector: Selector[Data],
                              fd: SocketHandle|int,
                              inLoop=true) =
   # TODO: Logging that the socket was closed.
+
+  # TODO: Can POST body be sent with Connection: Close?
+
   selector.unregister(fd)
   fd.SocketHandle.close()
   when inLoop:
@@ -66,6 +73,48 @@ proc onRequestFutureComplete(theFut: Future[void],
                              selector: Selector[Data], fd: int) =
   if theFut.failed:
     raise theFut.error
+
+template fastHeadersCheck(data: ptr Data): untyped =
+  (data.data[^1] == '\l' and data.data[^2] == '\c' and
+    data.data[^3] == '\l' and data.data[^4] == '\c')
+
+template methodNeedsBody(data: ptr Data): untyped =
+  (let m = parseHttpMethod(data.data);
+   m.isSome() and m.get() in {HttpPost, HttpPut, HttpConnect, HttpPatch})
+
+proc slowHeadersCheck(data: ptr Data): bool =
+  # TODO: See how this `unlikely` affects ASM.
+  if unlikely(methodNeedsBody(data)):
+    # Look for \c\l\c\l inside data.
+    data.headersFinishPos = 0
+    template ch(i): untyped = data.data[data.headersFinishPos+i]
+    while data.headersFinishPos < data.data.len:
+      case ch(0)
+      of '\c':
+        if ch(1) == '\l' and ch(2) == '\c' and ch(3) == '\l':
+          data.headersFinishPos.inc(4)
+          return true
+      else: discard
+      data.headersFinishPos.inc()
+
+    data.headersFinishPos = -1
+
+proc bodyInTransit(data: ptr Data): bool =
+  assert methodNeedsBody(data), "Calling bodyInTransit now is inefficient."
+  assert data.headersFinished
+
+  if data.headersFinishPos == -1: return false
+
+  let headers = data.data.parseHeaders()
+  if headers.isNone(): return false
+
+  var trueLen = 0
+  # TODO: Move this to `parser`? Parse as uint?
+  discard headers.get()["Content-Length"].parseSaturatedNatural(trueLen)
+
+  let bodyLen = data.data.len - data.headersFinishPos
+  assert(not (bodyLen > trueLen))
+  return bodyLen != trueLen
 
 proc validateRequest(req: Request): bool {.gcsafe.}
 proc processEvents(selector: Selector[Data],
@@ -119,8 +168,7 @@ proc processEvents(selector: Selector[Data],
           data.data.setLen(origLen + ret)
           for i in 0 ..< ret: data.data[origLen+i] = buf[i]
 
-          if data.data[^1] == '\l' and data.data[^2] == '\c' and
-             data.data[^3] == '\l' and data.data[^4] == '\c':
+          if fastHeadersCheck(data) or slowHeadersCheck(data):
             # First line and headers for request received.
             # TODO: For now we only support GET requests.
             # TODO: Check for POST and Content-Length in the most
@@ -129,20 +177,21 @@ proc processEvents(selector: Selector[Data],
             assert data.sendQueue.len == 0
             assert data.bytesSent == 0
 
-            let request = Request(
-              selector: selector,
-              client: fd.SocketHandle
-            )
+            if likely(not (methodNeedsBody(data) and bodyInTransit(data))):
+              let request = Request(
+                selector: selector,
+                client: fd.SocketHandle
+              )
 
-            if validateRequest(request):
-              let fut = onRequest(request)
-              if not fut.isNil:
-                fut.callback =
-                  (theFut: Future[void]) =>
-                    (onRequestFutureComplete(theFut, selector, fd))
+              if validateRequest(request):
+                let fut = onRequest(request)
+                if not fut.isNil:
+                  fut.callback =
+                    (theFut: Future[void]) =>
+                      (onRequestFutureComplete(theFut, selector, fd))
 
           if ret != size:
-            # Assume there is nothing else for us and break.
+            # Assume there is nothing else for us right now and break.
             break
       elif Event.Write in events[i].events:
         assert data.sendQueue.len > 0
@@ -230,6 +279,14 @@ proc httpMethod*(req: Request): Option[HttpMethod] {.inline.} =
 proc path*(req: Request): Option[string] {.inline.} =
   ## Parses the request's data to find the request target.
   parsePath(req.selector.getData(req.client).data)
+
+proc body*(req: Request): Option[string] =
+  ## Retrieves the body of the request.
+  let pos = req.selector.getData(req.client).headersFinishPos
+  if pos == -1: return none(string)
+  return req.selector.getData(req.client).data[
+    pos .. ^1
+  ].some()
 
 proc validateRequest(req: Request): bool =
   ## Handles protocol-mandated responses.

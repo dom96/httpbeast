@@ -56,6 +56,8 @@ proc tests() {.async.} =
     let body = await resp.body
     doAssert body == "Hi there!"
 
+  echo("All good!")
+
 when isMainModule:
   try:
     waitFor tests()

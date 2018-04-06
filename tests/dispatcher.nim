@@ -13,5 +13,11 @@ proc onRequest(req: Request) {.async.} =
       req.send("Hi there!")
     else:
       req.send(Http404)
+  elif req.httpMethod == some(HttpPost):
+    case req.path.get()
+    of "/":
+      req.send("Successful POST! Data=" & $req.body.get().len)
+    else:
+      req.send(Http404)
 
 run(onRequest)
