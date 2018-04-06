@@ -31,6 +31,9 @@ type
 
   OnRequest* = proc (req: Request): Future[void] {.gcsafe.}
 
+  Settings* = object
+    port: Port
+
 proc initData(fdKind: FdKind): Data =
   Data(fdKind: fdKind,
        sendQueue: "",
@@ -166,13 +169,15 @@ proc processEvents(selector: Selector[Data],
       else:
         assert false
 
-proc eventLoop(onRequest: OnRequest) =
+proc eventLoop(params: (OnRequest, Settings)) =
+  let (onRequest, settings) = params
+
   let selector = newSelector[Data]()
 
   let server = newSocket()
   server.setSockOpt(OptReuseAddr, true)
   server.setSockOpt(OptReusePort, true)
-  server.bindAddr(Port(8080))
+  server.bindAddr(settings.port)
   server.listen()
   server.getFd().setBlocking(false)
   selector.registerHandle(server.getFd(), {Event.Read}, initData(Server))
@@ -238,7 +243,7 @@ proc validateRequest(req: Request): bool =
     req.send(Http501)
     return false
 
-proc run*(onRequest: OnRequest) =
+proc run*(onRequest: OnRequest, settings: Settings) =
   ## Starts the HTTP server and calls `onRequest` for each request.
   ##
   ## The ``onRequest`` procedure returns a ``Future[void]`` type. But
@@ -247,9 +252,16 @@ proc run*(onRequest: OnRequest) =
   let cores = countProcessors()
   if cores > 1:
     echo("Starting ", cores, " threads")
-    var threads = newSeq[Thread[OnRequest]](cores)
+    var threads = newSeq[Thread[(OnRequest, Settings)]](cores)
     for i in 0 ..< cores:
-      createThread[OnRequest](threads[i], eventLoop, onRequest)
+      createThread[(OnRequest, Settings)](threads[i], eventLoop, (onRequest, settings))
     joinThreads(threads)
   else:
-    eventLoop(onRequest)
+    eventLoop((onRequest, settings))
+
+proc run*(onRequest: OnRequest) {.inline.} =
+  ## Starts the HTTP server with default settings. Calls `onRequest` for each
+  ## request.
+  ##
+  ## See the other ``run`` proc for more info.
+  run(onRequest, Settings(port: Port(8080)))
