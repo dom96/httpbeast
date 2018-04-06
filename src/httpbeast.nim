@@ -257,6 +257,7 @@ proc run*(onRequest: OnRequest, settings: Settings) =
     var threads = newSeq[Thread[(OnRequest, Settings)]](cores)
     for i in 0 ..< cores:
       createThread[(OnRequest, Settings)](threads[i], eventLoop, (onRequest, settings))
+    echo("Listening on port ", settings.port) # This line is used in the tester to signal readiness.
     joinThreads(threads)
   else:
     eventLoop((onRequest, settings))
