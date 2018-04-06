@@ -22,21 +22,6 @@ sysctl -w fs.file-max=100000
 ulimit -n 10000
 ```
 
-### Compiler versions
-
-```
-
-```
-
-### Servers
-
-- 1 DigitalOcean High CPU Droplet with 8 CPUs
-  - Used to run the HTTP servers
-- 1 DigitalOcean High CPU Droplet with 8 CPUs
-  - Used to run ``wrk``
-
-Both droplets are on the same private network.
-
 ## First phase
 
 The first phase is to build an HTTP server that cheats to get as many req/s as

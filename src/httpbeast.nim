@@ -10,10 +10,6 @@ export httpcore
 import httpbeast/parser
 
 type
-  Cache = object
-    data: string
-    response: string
-
   FdKind = enum
     Server, Client, Dispatcher
 
@@ -27,8 +23,6 @@ type
     data: string
     ## Determines whether `data` contains "\c\l\c\l"
     headersFinished: bool
-    ## A cache of the previous request.
-    cache: Option[Cache]
 
 type
   Request* = object
@@ -42,8 +36,7 @@ proc initData(fdKind: FdKind): Data =
        sendQueue: "",
        bytesSent: 0,
        data: "",
-       headersFinished: false,
-       cache: none(Cache)
+       headersFinished: false
       )
 
 template handleAccept() =
@@ -66,25 +59,10 @@ template handleClientClosure(selector: Selector[Data],
   else:
     return
 
-proc saveCache(selector: Selector[Data], fd: int, lenient: bool) =
-  # Save cache.
-  # TODO: Register a timer to expire the cache.
-  var data: ptr Data = addr(selector.getData(fd))
-  if lenient and data.sendQueue.len == 0:
-    # The send queue has been sent before we had a chance to capture it.
-    return
-
-  assert data.sendQueue.len > 0
-  data.cache = some(
-    Cache(data: data.data, response: data.sendQueue)
-  )
-
 proc onRequestFutureComplete(theFut: Future[void],
                              selector: Selector[Data], fd: int) =
   if theFut.failed:
     raise theFut.error
-  else:
-    saveCache(selector, fd, lenient=true)
 
 proc validateRequest(req: Request): bool {.gcsafe.}
 proc processEvents(selector: Selector[Data],
@@ -145,31 +123,18 @@ proc processEvents(selector: Selector[Data],
             data.headersFinished = true
             assert data.sendQueue.len == 0
             assert data.bytesSent == 0
-            # Check cache.
-            let cache = data.cache
-            if cache.isSome() and cache.get().data == data.data:
-              # Reply with the cached response.
-              assert cache.get().response.len > 0
-              data.sendQueue = cache.get().response
-              selector.updateHandle(fd.SocketHandle,
-                                    {Event.Read, Event.Write})
-            else:
-              let request = Request(
-                selector: selector,
-                client: fd.SocketHandle
-              )
 
-              var cacheHandled = false
-              if validateRequest(request):
-                let fut = onRequest(request)
-                if not fut.isNil:
-                  cacheHandled = true
-                  fut.callback =
-                    (theFut: Future[void]) =>
-                      (onRequestFutureComplete(theFut, selector, fd))
+            let request = Request(
+              selector: selector,
+              client: fd.SocketHandle
+            )
 
-              if not cacheHandled:
-                saveCache(selector, fd, lenient=false)
+            if validateRequest(request):
+              let fut = onRequest(request)
+              if not fut.isNil:
+                fut.callback =
+                  (theFut: Future[void]) =>
+                    (onRequestFutureComplete(theFut, selector, fd))
 
           if ret != size:
             # Assume there is nothing else for us and break.
