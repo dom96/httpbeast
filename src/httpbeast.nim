@@ -115,7 +115,9 @@ proc processEvents(selector: Selector[Data],
             raiseOSError(lastError)
 
           # Write buffer to our data.
-          data.data.add(addr(buf[0]))
+          let origLen = data.data.len
+          data.data.setLen(origLen + ret)
+          for i in 0 ..< ret: data.data[origLen+i] = buf[i]
 
           if data.data[^1] == '\l' and data.data[^2] == '\c' and
              data.data[^3] == '\l' and data.data[^4] == '\c':
