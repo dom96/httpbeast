@@ -116,6 +116,24 @@ proc bodyInTransit(data: ptr Data): bool =
   assert(not (bodyLen > trueLen))
   return bodyLen != trueLen
 
+proc defaultBacklog(): int =
+  when defined(linux):
+    proc fscanf(c: File, frmt: cstring): cint
+      {.varargs, importc, header: "<stdio.h>".}
+
+    var
+      backlog: int = SOMAXCONN
+      f: File
+      tmp: int
+
+    if f.open("/proc/sys/net/core/somaxconn"): # See `man 2 listen`.
+      if fscanf(f, "%d", tmp.addr) == cint(1):
+        backlog = tmp
+      f.close
+    return backlog
+  else:
+    return SOMAXCONN
+
 proc validateRequest(req: Request): bool {.gcsafe.}
 proc processEvents(selector: Selector[Data],
                    events: array[64, ReadyKey], count: int,
@@ -228,8 +246,9 @@ proc eventLoop(params: (OnRequest, Settings)) =
   let server = newSocket()
   server.setSockOpt(OptReuseAddr, true)
   server.setSockOpt(OptReusePort, true)
+  server.setSockOpt(OptNoDelay, true)
   server.bindAddr(settings.port)
-  server.listen()
+  server.listen(defaultBacklog().cint)
   server.getFd().setBlocking(false)
   selector.registerHandle(server.getFd(), {Event.Read}, initData(Server))
 
