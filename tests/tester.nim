@@ -56,6 +56,14 @@ proc tests() {.async.} =
     let body = await resp.body
     doAssert body == "Hi there!"
 
+  # Simple POST
+  block:
+    let client = newAsyncHttpClient()
+    let resp = await client.post("http://localhost:8080", body="hello")
+    doAssert resp.code == Http200
+    let body = await resp.body
+    doAssert body == "Successful POST! Data=5"
+
   echo("All good!")
 
 when isMainModule:
