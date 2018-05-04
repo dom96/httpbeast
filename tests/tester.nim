@@ -18,7 +18,8 @@ proc readLoop(process: AsyncProcess, findSuccess: bool) {.async.} =
       echo("Process:", buf.strip())
 
   echo("Process terminated")
-  process.close()
+  # asynctools should probably export this:
+  # process.close()
 
 proc startServer(file: string) {.async.} =
   var file = "tests" / file
