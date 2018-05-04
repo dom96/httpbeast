@@ -2,6 +2,8 @@ import selectors, net, nativesockets, os, httpcore, asyncdispatch, strutils
 import parseutils
 import options, future
 
+from deques import len
+
 from osproc import countProcessors
 
 import times # TODO this shouldn't be required. Nim bug?
@@ -241,6 +243,11 @@ proc eventLoop(params: (OnRequest, Settings)) =
   while true:
     let ret = selector.selectInto(-1, events)
     processEvents(selector, events, ret, onRequest)
+
+    # Ensure callbacks list doesn't grow forever in asyncdispatch.
+    # See https://github.com/nim-lang/Nim/issues/7532.
+    if unlikely(asyncdispatch.getGlobalDispatcher().callbacks.len > 1000):
+      asyncdispatch.poll(0)
 
 #[ API start ]#
 

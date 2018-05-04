@@ -18,7 +18,7 @@ task helloworld, "Compiles and executes the hello world server.":
   exec "nim c -d:release --gc:boehm -r tests/helloworld"
 
 task dispatcher, "Compiles and executes the dispatcher test server.":
-  exec "nim c -d:release -r tests/dispatcher"
+  exec "nim c -d:release --gc:boehm -r tests/dispatcher"
 
 task test, "Runs the test suite.":
   withDir "tests":
