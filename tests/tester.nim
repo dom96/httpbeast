@@ -21,6 +21,7 @@ proc readLoop(process: AsyncProcess, findSuccess: bool) {.async.} =
   process.close()
 
 proc startServer(file: string) {.async.} =
+  var file = "tests" / file
   if not serverProcess.isNil and serverProcess.running:
     serverProcess.terminate()
     # TODO: https://github.com/cheatfate/asynctools/issues/9
@@ -29,7 +30,7 @@ proc startServer(file: string) {.async.} =
 
   # The nim process doesn't behave well when using `-r`, if we kill it, the
   # process continues running...
-  doAssert execCmd("nim c " & file) == QuitSuccess
+  doAssert execCmd("nimble c -y " & file) == QuitSuccess
 
   serverProcess = startProcess(file.changeFileExt(ExeExt))
   await readLoop(serverProcess, true)

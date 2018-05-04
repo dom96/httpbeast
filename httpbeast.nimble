@@ -21,5 +21,4 @@ task dispatcher, "Compiles and executes the dispatcher test server.":
   exec "nim c -d:release --gc:boehm -r tests/dispatcher"
 
 task test, "Runs the test suite.":
-  withDir "tests":
-    exec "nim c -r tester"
+  exec "nimble c -y -r tests/tester"
