@@ -28,6 +28,8 @@ type
     headersFinished: bool
     ## Determines position of the end of "\c\l\c\l".
     headersFinishPos: int
+    ## The address that a `client` connects from.
+    ip: string
 
 type
   Request* = object
@@ -39,13 +41,14 @@ type
   Settings* = object
     port: Port
 
-proc initData(fdKind: FdKind): Data =
+proc initData(fdKind: FdKind, ip: string = nil): Data =
   Data(fdKind: fdKind,
        sendQueue: "",
        bytesSent: 0,
        data: "",
        headersFinished: false,
        headersFinishPos: -1, ## By default we assume the fast case: end of data.
+       ip: ip,
       )
 
 template handleAccept() =
@@ -55,7 +58,7 @@ template handleAccept() =
     raiseOSError(lastError)
   setBlocking(client, false)
   selector.registerHandle(client, {Event.Read},
-                          initData(Client))
+                          initData(Client, ip=address))
 
 template handleClientClosure(selector: Selector[Data],
                              fd: SocketHandle|int,
@@ -295,6 +298,14 @@ proc body*(req: Request): Option[string] =
     pos .. ^1
   ].some()
 
+proc ip*(req: Request): string =
+  ## Retrieves the IP address that the request was made from.
+  req.selector.getData(req.client).ip
+
+proc headers*(req: Request): Option[HttpHeaders] =
+  ## Parses the request's data to get the headers.
+  req.selector.getData(req.client).data.parseHeaders()
+
 proc validateRequest(req: Request): bool =
   ## Handles protocol-mandated responses.
   ##
@@ -315,14 +326,23 @@ proc run*(onRequest: OnRequest, settings: Settings) =
   ## The ``onRequest`` procedure returns a ``Future[void]`` type. But
   ## unlike most asynchronous procedures in Nim, it can return ``nil``
   ## for better performance, when no async operations are needed.
-  let cores = countProcessors()
+  when compileOption("threads"):
+    let cores = countProcessors()
+  else:
+    let cores = 1
+
+  echo("Starting ", cores, " threads")
   if cores > 1:
-    echo("Starting ", cores, " threads")
-    var threads = newSeq[Thread[(OnRequest, Settings)]](cores)
-    for i in 0 ..< cores:
-      createThread[(OnRequest, Settings)](threads[i], eventLoop, (onRequest, settings))
-    echo("Listening on port ", settings.port) # This line is used in the tester to signal readiness.
-    joinThreads(threads)
+    when compileOption("threads"):
+      var threads = newSeq[Thread[(OnRequest, Settings)]](cores)
+      for i in 0 ..< cores:
+        createThread[(OnRequest, Settings)](
+          threads[i], eventLoop, (onRequest, settings)
+        )
+      echo("Listening on port ", settings.port) # This line is used in the tester to signal readiness.
+      joinThreads(threads)
+    else:
+      assert false
   else:
     eventLoop((onRequest, settings))
 
@@ -332,3 +352,14 @@ proc run*(onRequest: OnRequest) {.inline.} =
   ##
   ## See the other ``run`` proc for more info.
   run(onRequest, Settings(port: Port(8080)))
+
+when false:
+  proc close*(port: Port) =
+    ## Closes an httpbeast server that is running on the specified port.
+    ##
+    ## **NOTE:** This is not yet implemented.
+
+    assert false
+    # TODO: Figure out the best way to implement this. One way is to use async
+    # events to signal our `eventLoop`. Maybe it would be better not to support
+    # multiple servers running at the same time?
