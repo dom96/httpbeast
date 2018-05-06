@@ -39,7 +39,7 @@ type
   OnRequest* = proc (req: Request): Future[void] {.gcsafe.}
 
   Settings* = object
-    port: Port
+    port*: Port
 
 proc initData(fdKind: FdKind, ip: string = nil): Data =
   Data(fdKind: fdKind,
@@ -249,10 +249,23 @@ proc eventLoop(params: (OnRequest, Settings)) =
 
     # Ensure callbacks list doesn't grow forever in asyncdispatch.
     # See https://github.com/nim-lang/Nim/issues/7532.
-    if unlikely(asyncdispatch.getGlobalDispatcher().callbacks.len > 1000):
+    # Not processing callbacks can also lead to exceptions being silently
+    # lost!
+    if unlikely(asyncdispatch.getGlobalDispatcher().callbacks.len > 0):
       asyncdispatch.poll(0)
 
 #[ API start ]#
+
+proc unsafeSend*(req: Request, data: string) {.inline.} =
+  ## Sends the specified data on the request socket.
+  ##
+  ## This function can be called as many times as necessary.
+  ##
+  ## It does not
+  ## check whether the socket is in a state that can be written so be
+  ## careful when using it.
+  req.selector.getData(req.client).sendQueue.add(data)
+  req.selector.updateHandle(req.client, {Event.Read, Event.Write})
 
 proc send*(req: Request, code: HttpCode, body: string) =
   ## Responds with the specified HttpCode and body.
