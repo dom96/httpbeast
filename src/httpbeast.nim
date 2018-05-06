@@ -80,8 +80,10 @@ proc onRequestFutureComplete(theFut: Future[void],
     raise theFut.error
 
 template fastHeadersCheck(data: ptr Data): untyped =
-  (data.data[^1] == '\l' and data.data[^2] == '\c' and
-    data.data[^3] == '\l' and data.data[^4] == '\c')
+  (let res = data.data[^1] == '\l' and data.data[^2] == '\c' and
+             data.data[^3] == '\l' and data.data[^4] == '\c';
+   if res: data.headersFinishPos = data.data.len-1;
+   res)
 
 template methodNeedsBody(data: ptr Data): untyped =
   (let m = parseHttpMethod(data.data);
@@ -303,21 +305,22 @@ proc path*(req: Request): Option[string] {.inline.} =
   ## Parses the request's data to find the request target.
   parsePath(req.selector.getData(req.client).data)
 
+proc headers*(req: Request): Option[HttpHeaders] =
+  ## Parses the request's data to get the headers.
+  req.selector.getData(req.client).data.parseHeaders()
+
 proc body*(req: Request): Option[string] =
   ## Retrieves the body of the request.
   let pos = req.selector.getData(req.client).headersFinishPos
   if pos == -1: return none(string)
-  return req.selector.getData(req.client).data[
+  result = req.selector.getData(req.client).data[
     pos .. ^1
   ].some()
+  assert result.get().len == req.headers.get()["Content-Length"].parseInt()
 
 proc ip*(req: Request): string =
   ## Retrieves the IP address that the request was made from.
   req.selector.getData(req.client).ip
-
-proc headers*(req: Request): Option[HttpHeaders] =
-  ## Parses the request's data to get the headers.
-  req.selector.getData(req.client).data.parseHeaders()
 
 proc validateRequest(req: Request): bool =
   ## Handles protocol-mandated responses.
