@@ -94,7 +94,11 @@ proc slowHeadersCheck(data: ptr Data): bool =
   if unlikely(methodNeedsBody(data)):
     # Look for \c\l\c\l inside data.
     data.headersFinishPos = 0
-    template ch(i): untyped = data.data[data.headersFinishPos+i]
+    template ch(i): untyped =
+      (
+        let pos = data.headersFinishPos+i;
+        if pos >= data.data.len: '\0' else: data.data[pos]
+      )
     while data.headersFinishPos < data.data.len:
       case ch(0)
       of '\c':
