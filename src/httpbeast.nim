@@ -82,7 +82,7 @@ proc onRequestFutureComplete(theFut: Future[void],
 template fastHeadersCheck(data: ptr Data): untyped =
   (let res = data.data[^1] == '\l' and data.data[^2] == '\c' and
              data.data[^3] == '\l' and data.data[^4] == '\c';
-   if res: data.headersFinishPos = data.data.len-1;
+   if res: data.headersFinishPos = data.data.len;
    res)
 
 template methodNeedsBody(data: ptr Data): untyped =
