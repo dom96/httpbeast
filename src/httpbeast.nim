@@ -270,6 +270,8 @@ proc unsafeSend*(req: Request, data: string) {.inline.} =
   ## It does not
   ## check whether the socket is in a state that can be written so be
   ## careful when using it.
+  if req.client notin req.selector:
+    return
   req.selector.getData(req.client).sendQueue.add(data)
   req.selector.updateHandle(req.client, {Event.Read, Event.Write})
 
@@ -277,6 +279,9 @@ proc send*(req: Request, code: HttpCode, body: string) =
   ## Responds with the specified HttpCode and body.
   ##
   ## **Warning:** This can only be called once in the OnRequest callback.
+
+  if req.client notin req.selector:
+    return
 
   # TODO: Reduce the amount of `getData` accesses.
   template getData: var Data = req.selector.getData(req.client)
