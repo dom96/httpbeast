@@ -41,6 +41,9 @@ type
   Settings* = object
     port*: Port
 
+const
+  serverInfo = "HttpBeast"
+
 proc initData(fdKind: FdKind, ip: string = nil): Data =
   Data(fdKind: fdKind,
        sendQueue: "",
@@ -275,7 +278,7 @@ proc unsafeSend*(req: Request, data: string) {.inline.} =
   req.selector.getData(req.client).sendQueue.add(data)
   req.selector.updateHandle(req.client, {Event.Read, Event.Write})
 
-proc send*(req: Request, code: HttpCode, body: string) =
+proc send*(req: Request, code: HttpCode, body: string, headers="") =
   ## Responds with the specified HttpCode and body.
   ##
   ## **Warning:** This can only be called once in the OnRequest callback.
@@ -288,9 +291,10 @@ proc send*(req: Request, code: HttpCode, body: string) =
   assert getData.headersFinished, "Selector not ready to send."
 
   getData.headersFinished = false
+  let otherHeaders = if likely(headers.len == 0): "" else: "\c\L" & headers
   var
-    text = "HTTP/1.1 $1\c\LContent-Length: $2\c\L\c\L$3" %
-           [$code, $body.len, body]
+    text = "HTTP/1.1 $#\c\LContent-Length: $#\c\LServer: $#$#\c\L\c\L$#" %
+           [$code, $body.len, serverInfo, otherHeaders, body]
 
   getData.sendQueue.add(text)
   req.selector.updateHandle(req.client, {Event.Read, Event.Write})
@@ -300,11 +304,11 @@ proc send*(req: Request, code: HttpCode) =
   ## is the same as the HttpCode description.
   req.send(code, $code)
 
-proc send*(req: Request, body: string) {.inline.} =
+proc send*(req: Request, body: string, code = Http200) {.inline.} =
   ## Sends a HTTP 200 OK response with the specified body.
   ##
   ## **Warning:** This can only be called once in the OnRequest callback.
-  req.send(Http200, body)
+  req.send(code, body)
 
 proc httpMethod*(req: Request): Option[HttpMethod] {.inline.} =
   ## Parses the request's data to find the request HttpMethod.
