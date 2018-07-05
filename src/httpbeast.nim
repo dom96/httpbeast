@@ -18,6 +18,7 @@ type
 
   Data = object
     fdKind: FdKind ## Determines the fd kind (server, client, dispatcher)
+    ## - Client specific data.
     ## A queue of data that needs to be sent when the FD becomes writeable.
     sendQueue: string
     ## The number of characters in `sendQueue` that have been sent already.
@@ -51,7 +52,7 @@ proc initData(fdKind: FdKind, ip: string = nil): Data =
        data: "",
        headersFinished: false,
        headersFinishPos: -1, ## By default we assume the fast case: end of data.
-       ip: ip,
+       ip: ip
       )
 
 template handleAccept() =
@@ -234,6 +235,11 @@ proc processEvents(selector: Selector[Data],
       else:
         assert false
 
+var serverDate {.threadvar.}: string
+proc updateDate(fd: AsyncFD): bool =
+  result = false # Returning true signifies we want timer to stop.
+  serverDate = now().utc().format("ddd, dd MMM yyyy HH:mm:ss 'GMT'")
+
 proc eventLoop(params: (OnRequest, Settings)) =
   let (onRequest, settings) = params
 
@@ -250,6 +256,10 @@ proc eventLoop(params: (OnRequest, Settings)) =
   let disp = getGlobalDispatcher()
   selector.registerHandle(getIoHandler(disp).getFd(), {Event.Read},
                           initData(Dispatcher))
+
+  # Set up timer to get current date/time.
+  discard updateDate(0.AsyncFD)
+  asyncdispatch.addTimer(1000, false, updateDate)
 
   var events: array[64, ReadyKey]
   while true:
@@ -293,8 +303,10 @@ proc send*(req: Request, code: HttpCode, body: string, headers="") =
   getData.headersFinished = false
   let otherHeaders = if likely(headers.len == 0): "" else: "\c\L" & headers
   var
-    text = "HTTP/1.1 $#\c\LContent-Length: $#\c\LServer: $#$#\c\L\c\L$#" %
-           [$code, $body.len, serverInfo, otherHeaders, body]
+    text = (
+      "HTTP/1.1 $#\c\L" &
+      "Content-Length: $#\c\LServer: $#\c\LDate: $#$#\c\L\c\L$#"
+    ) % [$code, $body.len, serverInfo, serverDate, otherHeaders, body]
 
   getData.sendQueue.add(text)
   req.selector.updateHandle(req.client, {Event.Read, Event.Write})
