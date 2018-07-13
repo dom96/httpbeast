@@ -1,4 +1,4 @@
-import options, httpcore
+import options, httpcore, parseutils
 
 proc parseHttpMethod*(data: string): Option[HttpMethod] =
   ## Parses the data to find the request HttpMethod.
@@ -81,3 +81,13 @@ proc parseHeaders*(data: string): Option[HttpHeaders] =
     i.inc()
 
   return none(HttpHeaders)
+
+proc parseContentLength*(data: string): int =
+  result = 0
+
+  let headers = data.parseHeaders()
+  if headers.isNone(): return
+
+  if unlikely(not headers.get().hasKey("Content-Length")): return
+
+  discard headers.get()["Content-Length"].parseSaturatedNatural(result)

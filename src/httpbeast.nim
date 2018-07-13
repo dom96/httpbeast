@@ -120,12 +120,7 @@ proc bodyInTransit(data: ptr Data): bool =
 
   if data.headersFinishPos == -1: return false
 
-  let headers = data.data.parseHeaders()
-  if headers.isNone(): return false
-
-  var trueLen = 0
-  # TODO: Move this to `parser`? Parse as uint?
-  discard headers.get()["Content-Length"].parseSaturatedNatural(trueLen)
+  var trueLen = parseContentLength(data.data)
 
   let bodyLen = data.data.len - data.headersFinishPos
   assert(not (bodyLen > trueLen))
