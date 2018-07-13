@@ -180,9 +180,6 @@ proc processEvents(selector: Selector[Data],
 
           if fastHeadersCheck(data) or slowHeadersCheck(data):
             # First line and headers for request received.
-            # TODO: For now we only support GET requests.
-            # TODO: Check for POST and Content-Length in the most
-            # TODO: optimised way possible!
             data.headersFinished = true
             assert data.sendQueue.len == 0
             assert data.bytesSent == 0
