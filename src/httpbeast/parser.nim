@@ -106,6 +106,7 @@ iterator parseRequests*(data: string): int =
        data[i+2] == '\c' and data[i+3] == '\l':
       if likely(i+4 == len(data)): break
       i.inc(4)
+      if parseHttpMethod(data, i).isNone(): continue
       yield i
 
     i.inc()

@@ -343,7 +343,14 @@ proc body*(req: Request): Option[string] =
   result = req.selector.getData(req.client).data[
     pos .. ^1
   ].some()
-  assert result.get().len == req.headers.get()["Content-Length"].parseInt()
+
+  when not defined(release):
+    let length =
+      if req.headers.get().hasKey("Content-Length"):
+        req.headers.get()["Content-Length"].parseInt()
+      else:
+        0
+    assert result.get().len == length
 
 proc ip*(req: Request): string =
   ## Retrieves the IP address that the request was made from.
