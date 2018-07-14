@@ -36,6 +36,9 @@ type
   Request* = object
     selector: Selector[Data]
     client: SocketHandle
+    # Determines where in the data buffer this request starts.
+    # Only used for HTTP pipelining.
+    start: int
 
   OnRequest* = proc (req: Request): Future[void] {.gcsafe.}
 
@@ -90,8 +93,12 @@ template fastHeadersCheck(data: ptr Data): untyped =
    res)
 
 template methodNeedsBody(data: ptr Data): untyped =
-  (let m = parseHttpMethod(data.data);
-   m.isSome() and m.get() in {HttpPost, HttpPut, HttpConnect, HttpPatch})
+  (
+    # Only idempotent methods can be pipelined (GET/HEAD/PUT/DELETE), they
+    # never need a body, so we just assume `start` at 0.
+    let m = parseHttpMethod(data.data, start=0);
+    m.isSome() and m.get() in {HttpPost, HttpPut, HttpConnect, HttpPatch}
+  )
 
 proc slowHeadersCheck(data: ptr Data): bool =
   # TODO: See how this `unlikely` affects ASM.
@@ -120,7 +127,7 @@ proc bodyInTransit(data: ptr Data): bool =
 
   if data.headersFinishPos == -1: return false
 
-  var trueLen = parseContentLength(data.data)
+  var trueLen = parseContentLength(data.data, start=0)
 
   let bodyLen = data.data.len - data.headersFinishPos
   assert(not (bodyLen > trueLen))
@@ -184,18 +191,21 @@ proc processEvents(selector: Selector[Data],
             assert data.sendQueue.len == 0
             assert data.bytesSent == 0
 
-            if likely(not (methodNeedsBody(data) and bodyInTransit(data))):
-              let request = Request(
-                selector: selector,
-                client: fd.SocketHandle
-              )
+            let waitingForBody = methodNeedsBody(data) and bodyInTransit(data)
+            if likely(not waitingForBody):
+              for start in parseRequests(data.data):
+                let request = Request(
+                  selector: selector,
+                  client: fd.SocketHandle,
+                  start: start
+                )
 
-              if validateRequest(request):
-                let fut = onRequest(request)
-                if not fut.isNil:
-                  fut.callback =
-                    (theFut: Future[void]) =>
-                      (onRequestFutureComplete(theFut, selector, fd))
+                if validateRequest(request):
+                  let fut = onRequest(request)
+                  if not fut.isNil:
+                    fut.callback =
+                      (theFut: Future[void]) =>
+                        (onRequestFutureComplete(theFut, selector, fd))
 
           if ret != size:
             # Assume there is nothing else for us right now and break.
@@ -316,15 +326,15 @@ proc send*(req: Request, body: string, code = Http200) {.inline.} =
 
 proc httpMethod*(req: Request): Option[HttpMethod] {.inline.} =
   ## Parses the request's data to find the request HttpMethod.
-  parseHttpMethod(req.selector.getData(req.client).data)
+  parseHttpMethod(req.selector.getData(req.client).data, req.start)
 
 proc path*(req: Request): Option[string] {.inline.} =
   ## Parses the request's data to find the request target.
-  parsePath(req.selector.getData(req.client).data)
+  parsePath(req.selector.getData(req.client).data, req.start)
 
 proc headers*(req: Request): Option[HttpHeaders] =
   ## Parses the request's data to get the headers.
-  req.selector.getData(req.client).data.parseHeaders()
+  parseHeaders(req.selector.getData(req.client).data, req.start)
 
 proc body*(req: Request): Option[string] =
   ## Retrieves the body of the request.

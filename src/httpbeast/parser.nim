@@ -1,33 +1,33 @@
 import options, httpcore, parseutils
 
-proc parseHttpMethod*(data: string): Option[HttpMethod] =
+proc parseHttpMethod*(data: string, start: int): Option[HttpMethod] =
   ## Parses the data to find the request HttpMethod.
 
   # HTTP methods are case sensitive.
   # (RFC7230 3.1.1. "The request method is case-sensitive.")
-  case data[0]
+  case data[start]
   of 'G':
-    if data[1] == 'E' and data[2] == 'T':
+    if data[start+1] == 'E' and data[start+2] == 'T':
       return some(HttpGet)
   of 'H':
-    if data[1] == 'E' and data[2] == 'A' and data[3] == 'D':
+    if data[start+1] == 'E' and data[start+2] == 'A' and data[start+3] == 'D':
       return some(HttpHead)
   of 'P':
-    if data[1] == 'O' and data[2] == 'S' and data[3] == 'T':
+    if data[start+1] == 'O' and data[start+2] == 'S' and data[start+3] == 'T':
       return some(HttpPost)
-    if data[1] == 'U' and data[2] == 'T':
+    if data[start+1] == 'U' and data[start+2] == 'T':
       return some(HttpPut)
   else: discard
 
   return none(HttpMethod)
 
-proc parsePath*(data: string): Option[string] =
+proc parsePath*(data: string, start: int): Option[string] =
   ## Parses the request path from the specified data.
 
   # Find the first ' '.
   # We can actually start ahead a little here. Since we know
   # the shortest HTTP method: 'GET'/'PUT'.
-  var i = 2
+  var i = start+2
   while data[i] notin {' ', '\0'}: i.inc()
 
   if likely(data[i] == ' '):
@@ -41,10 +41,10 @@ proc parsePath*(data: string): Option[string] =
   else:
     return none(string)
 
-proc parseHeaders*(data: string): Option[HttpHeaders] =
+proc parseHeaders*(data: string, start: int): Option[HttpHeaders] =
   var pairs: seq[(string, string)] = @[]
 
-  var i = 0
+  var i = start
   # Skip first line containing the method, path and HTTP version.
   while data[i] != '\l': i.inc
 
@@ -82,12 +82,30 @@ proc parseHeaders*(data: string): Option[HttpHeaders] =
 
   return none(HttpHeaders)
 
-proc parseContentLength*(data: string): int =
+proc parseContentLength*(data: string, start: int): int =
   result = 0
 
-  let headers = data.parseHeaders()
+  let headers = data.parseHeaders(start)
   if headers.isNone(): return
 
   if unlikely(not headers.get().hasKey("Content-Length")): return
 
   discard headers.get()["Content-Length"].parseSaturatedNatural(result)
+
+iterator parseRequests*(data: string): int =
+  ## Yields the start position of each request in `data`.
+  ##
+  ## This is only necessary for support of HTTP pipelining. The assumption
+  ## is that there is a request at position `0`, and that there MAY be another
+  ## request further in the data buffer.
+  var i = 0
+  yield i
+
+  while i+3 < len(data):
+    if data[i+0] == '\c' and data[i+1] == '\l' and
+       data[i+2] == '\c' and data[i+3] == '\l':
+      if likely(i+4 == len(data)): break
+      i.inc(4)
+      yield i
+
+    i.inc()
