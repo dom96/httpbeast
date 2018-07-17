@@ -1,6 +1,6 @@
 import selectors, net, nativesockets, os, httpcore, asyncdispatch, strutils
 import parseutils
-import options, future
+import options, future, logging
 
 from deques import len
 
@@ -188,24 +188,40 @@ proc processEvents(selector: Selector[Data],
           if fastHeadersCheck(data) or slowHeadersCheck(data):
             # First line and headers for request received.
             data.headersFinished = true
-            assert data.sendQueue.len == 0
-            assert data.bytesSent == 0
+            when not defined(release):
+              if data.sendQueue.len != 0:
+                logging.warn("sendQueue isn't empty.")
+              if data.bytesSent != 0:
+                logging.warn("bytesSent isn't empty.")
 
             let waitingForBody = methodNeedsBody(data) and bodyInTransit(data)
             if likely(not waitingForBody):
               for start in parseRequests(data.data):
+                # For pipelined requests, we need to reset this flag.
+                data.headersFinished = true
+
+                let sendQueueBefore = data.sendQueue.len
                 let request = Request(
                   selector: selector,
                   client: fd.SocketHandle,
                   start: start
                 )
 
+                template validateResponse(): untyped =
+                  # Check whether the request was responded to.
+                  assert data.sendQueue.len - sendQueueBefore > 0,
+                         "Request needs a response."
+                  data.headersFinished = false
+
                 if validateRequest(request):
                   let fut = onRequest(request)
                   if not fut.isNil:
                     fut.callback =
-                      (theFut: Future[void]) =>
-                        (onRequestFutureComplete(theFut, selector, fd))
+                      proc (theFut: Future[void]) =
+                        onRequestFutureComplete(theFut, selector, fd)
+                        validateResponse()
+                  else:
+                    validateResponse()
 
           if ret != size:
             # Assume there is nothing else for us right now and break.
@@ -302,7 +318,6 @@ proc send*(req: Request, code: HttpCode, body: string, headers="") =
   template getData: var Data = req.selector.getData(req.client)
   assert getData.headersFinished, "Selector not ready to send."
 
-  getData.headersFinished = false
   let otherHeaders = if likely(headers.len == 0): "" else: "\c\L" & headers
   var
     text = (
