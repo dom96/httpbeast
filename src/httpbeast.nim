@@ -44,9 +44,16 @@ type
 
   Settings* = object
     port*: Port
+    bindAddr*: string
 
 const
   serverInfo = "HttpBeast"
+
+proc initSettings*(port: Port = Port(8080), bindAddr: string = ""): Settings =
+  Settings(
+    port: port,
+    bindAddr: bindAddr
+  )
 
 proc initData(fdKind: FdKind, ip: string = nil): Data =
   Data(fdKind: fdKind,
@@ -261,7 +268,7 @@ proc eventLoop(params: (OnRequest, Settings)) =
   let server = newSocket()
   server.setSockOpt(OptReuseAddr, true)
   server.setSockOpt(OptReusePort, true)
-  server.bindAddr(settings.port)
+  server.bindAddr(settings.port, settings.bindAddr)
   server.listen()
   server.getFd().setBlocking(false)
   selector.registerHandle(server.getFd(), {Event.Read}, initData(Server))
@@ -411,7 +418,7 @@ proc run*(onRequest: OnRequest) {.inline.} =
   ## request.
   ##
   ## See the other ``run`` proc for more info.
-  run(onRequest, Settings(port: Port(8080)))
+  run(onRequest, Settings(port: Port(8080), bindAddr: ""))
 
 when false:
   proc close*(port: Port) =
