@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.1.1"
+version       = "0.2.0"
 author        = "Dominik Picheta"
 description   = "A super-fast epoll-backed and parallel HTTP server."
 license       = "MIT"
@@ -9,7 +9,7 @@ srcDir = "src"
 
 # Dependencies
 
-requires "nim >= 0.17.3"
+requires "nim >= 0.18.0"
 
 # Test dependencies
 requires "asynctools"
