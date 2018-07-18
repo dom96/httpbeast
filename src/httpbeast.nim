@@ -159,7 +159,6 @@ proc processEvents(selector: Selector[Data],
       asyncdispatch.poll(0)
     of Client:
       if Event.Read in events[i].events:
-        assert data.sendQueue.len == 0
         const size = 256
         var buf: array[size, char]
         # Read until EAGAIN. We take advantage of the fact that the client
@@ -200,7 +199,6 @@ proc processEvents(selector: Selector[Data],
                 # For pipelined requests, we need to reset this flag.
                 data.headersFinished = true
 
-                let sendQueueBefore = data.sendQueue.len
                 let request = Request(
                   selector: selector,
                   client: fd.SocketHandle,
@@ -208,9 +206,6 @@ proc processEvents(selector: Selector[Data],
                 )
 
                 template validateResponse(): untyped =
-                  # Check whether the request was responded to.
-                  assert data.sendQueue.len - sendQueueBefore > 0,
-                         "Request needs a response."
                   data.headersFinished = false
 
                 if validateRequest(request):
