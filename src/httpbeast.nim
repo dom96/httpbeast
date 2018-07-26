@@ -229,10 +229,16 @@ proc processEvents(selector: Selector[Data],
             # Assume there is nothing else for us right now and break.
             break
       elif Event.Write in events[i].events:
-        assert data.sendQueue.len > 0
-        assert data.bytesSent < data.sendQueue.len
+        assert data.sendQueue.len >= 0
+        assert data.bytesSent <= data.sendQueue.len
         # Write the sendQueue.
         let leftover = data.sendQueue.len-data.bytesSent
+
+        # Nothing send data
+        if leftover == 0 : 
+          selector.updateHandle(fd.SocketHandle,{Event.Read})
+          continue
+
         let ret = send(fd.SocketHandle, addr data.sendQueue[data.bytesSent],
                        leftover, 0)
         if ret == -1:
@@ -340,6 +346,53 @@ proc send*(req: Request, body: string, code = Http200) {.inline.} =
   ##
   ## **Warning:** This can only be called once in the OnRequest callback.
   req.send(code, body)
+
+proc rawflush*(req: Request) :Future[bool] {.async.} = 
+  ## Send sendQueue manually.
+  ## When returned false , client disconnection.
+  ## Other errors are sent in the eventloop as data remains in sendqueue
+  ## 
+  ## It does not
+  ## check whether the socket is in a state that can be written so be
+  ## careful when using it.
+
+  result = true
+
+  if req.client notin req.selector:
+    return
+
+  let data: ptr Data = addr(req.selector.getData(req.client))
+  
+  assert data.sendQueue.len >= 0
+  assert data.bytesSent <= data.sendQueue.len
+
+  block sending:
+    # Write the sendQueue.
+    let leftover = data.sendQueue.len-data.bytesSent
+
+    # Nothing send data
+    if leftover == 0 : 
+      break
+
+    let ret = send(req.client, addr data.sendQueue[data.bytesSent],
+                  leftover, 0)
+    if ret == -1:
+      # Error!
+      let lastError = osLastError()
+      if lastError.int32 in {EWOULDBLOCK, EAGAIN}:
+        break
+      if isDisconnectionError({SocketFlag.SafeDisconn}, lastError):
+        result = false
+        handleClientClosure(req.selector, req.client)
+      raiseOSError(lastError)
+
+    data.bytesSent.inc(ret)
+
+    if data.sendQueue.len == data.bytesSent:
+      data.bytesSent = 0
+      data.sendQueue.setLen(0)
+      data.data.setLen(0)
+      req.selector.updateHandle(req.client, {Event.Read})
 
 proc httpMethod*(req: Request): Option[HttpMethod] {.inline.} =
   ## Parses the request's data to find the request HttpMethod.
