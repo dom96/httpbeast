@@ -1,4 +1,3 @@
-/tests/
-!*.nim
-!*.cfg
-
+/tests/*
+!/tests/*.nim
+!/tests/*.cfg
