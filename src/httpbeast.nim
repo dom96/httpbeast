@@ -55,7 +55,7 @@ proc initSettings*(port: Port = Port(8080), bindAddr: string = ""): Settings =
     bindAddr: bindAddr
   )
 
-proc initData(fdKind: FdKind, ip: string = nil): Data =
+proc initData(fdKind: FdKind, ip = ""): Data =
   Data(fdKind: fdKind,
        sendQueue: "",
        bytesSent: 0,
