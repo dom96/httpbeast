@@ -25,6 +25,11 @@ proc parseHttpMethod*(data: string, start: int): Option[HttpMethod] =
        data[start+3] == 'E' and data[start+4] == 'T' and
        data[start+5] == 'E':
       return some(HttpDelete)
+  of 'O':
+    if data[start+1] == 'P' and data[start+2] == 'T' and
+       data[start+3] == 'I' and data[start+4] == 'O' and
+       data[start+5] == 'N' and data[start+6] == 'S':
+      return some(HttpOptions)
   else: discard
 
   return none(HttpMethod)
