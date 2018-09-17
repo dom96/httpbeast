@@ -141,7 +141,8 @@ proc bodyInTransit(data: ptr Data): bool =
   return bodyLen != trueLen
 
 proc validateRequest(req: Request): bool {.gcsafe.}
-proc processEvents(selector: Selector[Data],
+when not defined(nimdoc):
+ proc processEvents(selector: Selector[Data],
                    events: array[64, ReadyKey], count: int,
                    onRequest: OnRequest) =
   for i in 0 ..< count:
@@ -261,6 +262,7 @@ proc updateDate(fd: AsyncFD): bool =
   serverDate = now().utc().format("ddd, dd MMM yyyy HH:mm:ss 'GMT'")
 
 proc eventLoop(params: (OnRequest, Settings)) =
+ when not defined(nimdoc):
   let (onRequest, settings) = params
 
   let selector = newSelector[Data]()
