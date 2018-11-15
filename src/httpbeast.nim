@@ -308,6 +308,32 @@ proc unsafeSend*(req: Request, data: string) {.inline.} =
   req.selector.getData(req.client).sendQueue.add(data)
   req.selector.updateHandle(req.client, {Event.Read, Event.Write})
 
+proc prepareHeaders(bodySize: int, serverInfo, serverDate: string,  headers=""): string =
+  if headers == "":
+    return "Content-Length: $#\c\LServer: $#\c\LDate: $#" % [$bodySize, serverInfo, serverDate]
+
+  var
+    headerList = headers.split("\c\L")
+    hasContentLength = false
+    hasServer = false
+    hasDate = false
+
+  for header in headerList:
+    if header.startsWith("Content-Length: "): hasContentLength = true
+    if header.startsWith("Server: "): hasServer = true
+    if header.startsWith("Date: "): hasDate = true
+
+  if not hasContentLength:
+    headerList.add("Content-Length: $#" % [$bodySize])
+
+  if not hasServer:
+    headerList.add("Server: $#" % [serverInfo])
+
+  if not hasDate:
+    headerList.add("Date: $#" % [serverDate])
+
+  result = join(headerList, "\c\L")
+
 proc send*(req: Request, code: HttpCode, body: string, headers="") =
   ## Responds with the specified HttpCode and body.
   ##
@@ -320,12 +346,12 @@ proc send*(req: Request, code: HttpCode, body: string, headers="") =
   template getData: var Data = req.selector.getData(req.client)
   assert getData.headersFinished, "Selector not ready to send."
 
-  let otherHeaders = if likely(headers.len == 0): "" else: "\c\L" & headers
+  let responseHeaders = prepareHeaders(body.len, serverInfo, serverDate, headers)
   var
     text = (
       "HTTP/1.1 $#\c\L" &
-      "Content-Length: $#\c\LServer: $#\c\LDate: $#$#\c\L\c\L$#"
-    ) % [$code, $body.len, serverInfo, serverDate, otherHeaders, body]
+      "$#\c\L\c\L$#"
+    ) % [$code, responseHeaders, body]
 
   getData.sendQueue.add(text)
   req.selector.updateHandle(req.client, {Event.Read, Event.Write})
