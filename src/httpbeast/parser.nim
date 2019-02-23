@@ -18,7 +18,7 @@ proc parseHttpMethod*(data: string, start: int): Option[HttpMethod] =
     if data[start+1] == 'U' and data[start+2] == 'T':
       return some(HttpPut)
     if data[start+1] == 'A' and data[start+2] == 'T' and
-       data[start+3] == 'C' and data[start+3] == 'H':
+       data[start+3] == 'C' and data[start+4] == 'H':
       return some(HttpPatch)
   of 'D':
     if data[start+1] == 'E' and data[start+2] == 'L' and
