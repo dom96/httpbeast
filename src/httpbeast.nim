@@ -35,7 +35,7 @@ type
 type
   Request* = object
     selector: Selector[Data]
-    client: SocketHandle
+    client*: SocketHandle
     # Determines where in the data buffer this request starts.
     # Only used for HTTP pipelining.
     start: int
@@ -372,6 +372,15 @@ proc body*(req: Request): Option[string] =
 proc ip*(req: Request): string =
   ## Retrieves the IP address that the request was made from.
   req.selector.getData(req.client).ip
+
+proc forget*(req: Request) =
+  ## Unregisters the underlying request's client socket from httpbeast's
+  ## event loop.
+  ##
+  ## This is useful when you want to register ``req.client`` in your own
+  ## event loop, for example when wanting to integrate httpbeast into a
+  ## websocket library.
+  req.selector.unregister(req.client)
 
 proc validateRequest(req: Request): bool =
   ## Handles protocol-mandated responses.
