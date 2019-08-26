@@ -1,4 +1,4 @@
-import selectors, net, nativesockets, os, httpcore, asyncdispatch, strutils
+import selectors, net, nativesockets, os, httpcore, asyncdispatch, strutils, posix
 import parseutils
 import options, future, logging
 
@@ -69,6 +69,11 @@ template handleAccept() =
   let (client, address) = fd.SocketHandle.accept()
   if client == osInvalidSocket:
     let lastError = osLastError()
+
+    if lastError.int32 == EMFILE:
+      warn("Ignoring EMFILE error: ", osErrorMsg(lastError))
+      return
+
     raiseOSError(lastError)
   setBlocking(client, false)
   selector.registerHandle(client, {Event.Read},
