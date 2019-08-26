@@ -71,7 +71,7 @@ template handleAccept() =
     let lastError = osLastError()
 
     if lastError.int32 == EMFILE:
-      echo osErrorMsg(lastError)
+      warn("Ignoring EMFILE error: ", osErrorMsg(lastError))
       return
 
     raiseOSError(lastError)
