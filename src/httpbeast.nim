@@ -352,10 +352,12 @@ proc httpMethod*(req: Request): Option[HttpMethod] {.inline.} =
 
 proc path*(req: Request): Option[string] {.inline.} =
   ## Parses the request's data to find the request target.
+  if req.client notin req.selector: return
   parsePath(req.selector.getData(req.client).data, req.start)
 
 proc headers*(req: Request): Option[HttpHeaders] =
   ## Parses the request's data to get the headers.
+  if req.client notin req.selector: return
   parseHeaders(req.selector.getData(req.client).data, req.start)
 
 proc body*(req: Request): Option[string] =
