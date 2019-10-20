@@ -36,7 +36,7 @@ proc parseHttpMethod*(data: string, start: int): Option[HttpMethod] =
 
 proc parsePath*(data: string, start: int): Option[string] =
   ## Parses the request path from the specified data.
-  if data.len == 0: return
+  if unlikely(data.len == 0): return
 
   # Find the first ' '.
   # We can actually start ahead a little here. Since we know
@@ -56,7 +56,7 @@ proc parsePath*(data: string, start: int): Option[string] =
     return none(string)
 
 proc parseHeaders*(data: string, start: int): Option[HttpHeaders] =
-  if data.len == 0: return
+  if unlikely(data.len == 0): return
   var pairs: seq[(string, string)] = @[]
 
   var i = start
