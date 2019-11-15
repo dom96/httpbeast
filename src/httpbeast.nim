@@ -263,7 +263,7 @@ proc processEvents(selector: Selector[Data],
 var serverDate {.threadvar.}: string
 proc updateDate(fd: AsyncFD): bool =
   result = false # Returning true signifies we want timer to stop.
-  serverDate = now().utc().format("ddd, dd MMM yyyy HH:mm:ss 'GMT'")
+  serverDate = getTime().utc().format("ddd, dd MMM yyyy HH:mm:ss 'GMT'")
 
 proc eventLoop(params: (OnRequest, Settings)) =
   let (onRequest, settings) = params
