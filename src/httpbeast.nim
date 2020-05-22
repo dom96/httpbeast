@@ -45,14 +45,18 @@ type
   Settings* = object
     port*: Port
     bindAddr*: string
+    numThreads: int
 
 const
   serverInfo = "HttpBeast"
 
-proc initSettings*(port: Port = Port(8080), bindAddr: string = ""): Settings =
+proc initSettings*(port: Port = Port(8080),
+                   bindAddr: string = "",
+                   numThreads: int = 0): Settings =
   Settings(
     port: port,
-    bindAddr: bindAddr
+    bindAddr: bindAddr,
+    numThreads: numThreads,
   )
 
 proc initData(fdKind: FdKind, ip = ""): Data =
@@ -410,15 +414,16 @@ proc run*(onRequest: OnRequest, settings: Settings) =
   ## unlike most asynchronous procedures in Nim, it can return ``nil``
   ## for better performance, when no async operations are needed.
   when compileOption("threads"):
-    let cores = countProcessors()
+    let numThreads = if settings.numThreads == 0: countProcessors()
+      else: settings.numThreads
   else:
-    let cores = 1
+    let numThreads = 1
 
-  echo("Starting ", cores, " threads")
-  if cores > 1:
+  echo("Starting ", numThreads, " threads")
+  if numThreads > 1:
     when compileOption("threads"):
-      var threads = newSeq[Thread[(OnRequest, Settings)]](cores)
-      for i in 0 ..< cores:
+      var threads = newSeq[Thread[(OnRequest, Settings)]](numThreads)
+      for i in 0 ..< numThreads:
         createThread[(OnRequest, Settings)](
           threads[i], eventLoop, (onRequest, settings)
         )
