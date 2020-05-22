@@ -2,9 +2,7 @@
 
 Extremely fast HTTP responses in Nim.
 
-This is a project to get the fastest possible HTTP server written in pure Nim.
-The server is still considered experimental but it is already used by the
-Jester web framework.
+This is a project to get the fastest possible HTTP server written in pure Nim. It is currently in the [top 10 in the TechEmpower benchmarks](https://www.techempower.com/benchmarks/#section=data-r18&hw=ph&test=json).
 
 **Note:** This HTTP server does not support Windows.
 
