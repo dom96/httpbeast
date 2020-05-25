@@ -414,7 +414,8 @@ proc run*(onRequest: OnRequest, settings: Settings) =
   ## unlike most asynchronous procedures in Nim, it can return ``nil``
   ## for better performance, when no async operations are needed.
   when compileOption("threads"):
-    let numThreads = if settings.numThreads == 0: countProcessors()
+    let numThreads =
+      if settings.numThreads == 0: countProcessors()
       else: settings.numThreads
   else:
     let numThreads = 1
