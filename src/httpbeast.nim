@@ -96,8 +96,10 @@ template handleClientClosure(selector: Selector[Data],
   if completed:
     fd.SocketHandle.close()
 
-  when inLoop: break
-  else: return
+  when inLoop:
+    break
+  else:
+    return
 
 proc onRequestFutureComplete(theFut: Future[void],
                              selector: Selector[Data], fd: int) =
@@ -247,7 +249,8 @@ proc processEvents(selector: Selector[Data],
                       fd.int,
                       proc (fut: Future[void]; fd: int) =
                         onRequestFutureComplete(fut, selector, fd)
-                        validateResponse())
+                        validateResponse()
+                    )
                   else:
                     data.completed = true
                     validateResponse()
