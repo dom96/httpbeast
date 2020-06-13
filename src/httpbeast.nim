@@ -31,6 +31,10 @@ type
     headersFinishPos: int
     ## The address that a `client` connects from.
     ip: string
+    ## Determines whether the client has closed the connection.
+    closed: bool
+    ## Determines whether the onRequest future has completed.
+    completed: bool
 
 type
   Request* = object
@@ -83,18 +87,30 @@ template handleClientClosure(selector: Selector[Data],
                              fd: SocketHandle|int,
                              inLoop=true) =
   # TODO: Logging that the socket was closed.
-
   # TODO: Can POST body be sent with Connection: Close?
+  var data: ptr Data = addr selector.getData(fd)
+  let completed = data.completed
+  data.closed = true
+  if not completed or fd in selector:
+    selector.unregister(fd)
+  if completed:
+    fd.SocketHandle.close()
 
-  selector.unregister(fd)
-  fd.SocketHandle.close()
-  when inLoop:
-    break
-  else:
-    return
+  when inLoop: break
+  else: return
 
 proc onRequestFutureComplete(theFut: Future[void],
                              selector: Selector[Data], fd: int) =
+  var data: ptr Data = addr selector.getData(fd)
+  if data == nil:
+    fd.SocketHandle.close()
+  elif data.fdKind == Client:
+    data.completed = true
+    if not data.closed and data.sendQueue.len == 0:
+      selector.unregister(fd)
+    if data.closed or data.sendQueue.len == 0:
+      fd.SocketHandle.close()
+
   if theFut.failed:
     raise theFut.error
 
@@ -144,6 +160,10 @@ proc bodyInTransit(data: ptr Data): bool =
   let bodyLen = data.data.len - data.headersFinishPos
   assert(not (bodyLen > trueLen))
   return bodyLen != trueLen
+
+proc addCallback[T](future: Future[T], fd: int,
+                    cb: proc (fut: Future[T]; fd: int) {.closure, gcsafe.}) =
+  future.addCallback(proc() = cb(future, fd))
 
 proc validateRequest(req: Request): bool {.gcsafe.}
 proc processEvents(selector: Selector[Data],
@@ -223,11 +243,13 @@ proc processEvents(selector: Selector[Data],
                 if validateRequest(request):
                   let fut = onRequest(request)
                   if not fut.isNil:
-                    fut.callback =
-                      proc (theFut: Future[void]) =
-                        onRequestFutureComplete(theFut, selector, fd)
-                        validateResponse()
+                    fut.addCallback(
+                      fd.int,
+                      proc (fut: Future[void]; fd: int) =
+                        onRequestFutureComplete(fut, selector, fd)
+                        validateResponse())
                   else:
+                    data.completed = true
                     validateResponse()
 
           if ret != size:
