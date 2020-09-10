@@ -12,7 +12,12 @@ srcDir = "src"
 requires "nim >= 0.18.0"
 
 # Test dependencies
-requires "https://github.com/alehander92/asynctools"
+# TODO: Switch back to:
+#   requires "asynctools >= 0.1.2"
+# once the following issues are fixed:
+# - https://github.com/cheatfate/asynctools/pull/27
+# - https://github.com/cheatfate/asynctools/issues/22
+requires "https://github.com/iffy/asynctools#pr_fix_for_latest"
 
 task helloworld, "Compiles and executes the hello world server.":
   exec "nim c -d:release --gc:boehm -r tests/helloworld"
