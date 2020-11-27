@@ -46,6 +46,7 @@ type
     port*: Port
     bindAddr*: string
     numThreads: int
+    loggers: seq[Logger]
 
 const
   serverInfo = "HttpBeast"
@@ -53,10 +54,12 @@ const
 proc initSettings*(port: Port = Port(8080),
                    bindAddr: string = "",
                    numThreads: int = 0): Settings =
+
   Settings(
     port: port,
     bindAddr: bindAddr,
     numThreads: numThreads,
+    loggers: getHandlers()
   )
 
 proc initData(fdKind: FdKind, ip = ""): Data =
@@ -271,6 +274,9 @@ proc updateDate(fd: AsyncFD): bool =
 
 proc eventLoop(params: (OnRequest, Settings)) =
   let (onRequest, settings) = params
+
+  for logger in settings.loggers:
+    addHandler(logger)
 
   let selector = newSelector[Data]()
 

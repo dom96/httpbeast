@@ -66,6 +66,24 @@ proc tests() {.async.} =
     let body = await resp.body
     doAssert body == "Successful POST! Data=5"
 
+  await startServer("simpleLog.nim")
+
+  # Check that configured loggers are passed to each thread
+  let logFilename = "tests/logFile.tmp"
+  block:
+    let client = newAsyncHttpClient()
+    let resp = await client.get("http://localhost:8080")
+    doAssert resp.code == Http200
+    doAssert logFilename.readLines() == @["INFO Requested /"]
+
+  block:
+    let client = newAsyncHttpClient()
+    let resp = await client.get("http://localhost:8080/404")
+    doAssert resp.code == Http404
+    doAssert logFilename.readLines(2) == @["INFO Requested /", "ERROR 404"]
+
+  doAssert tryRemoveFile(logFilename)
+
   echo("All good!")
 
 when isMainModule:
