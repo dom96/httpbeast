@@ -30,9 +30,7 @@ proc parseHttpMethod*(data: string, start: int): Option[HttpMethod] =
        data[start+3] == 'I' and data[start+4] == 'O' and
        data[start+5] == 'N' and data[start+6] == 'S':
       return some(HttpOptions)
-  else: discard
-
-  return none(HttpMethod)
+  else: return none(HttpMethod)
 
 proc parsePath*(data: string, start: int): Option[string] =
   ## Parses the request path from the specified data.
@@ -57,7 +55,7 @@ proc parsePath*(data: string, start: int): Option[string] =
 
 proc parseHeaders*(data: string, start: int): Option[HttpHeaders] =
   if unlikely(data.len == 0): return
-  var pairs: seq[(string, string)] = @[]
+  var pairs: seq[(string, string)]
 
   var i = start
   # Skip first line containing the method, path and HTTP version.
@@ -66,7 +64,7 @@ proc parseHeaders*(data: string, start: int): Option[HttpHeaders] =
   i.inc # Skip \l
 
   var value = false
-  var current: (string, string) = ("", "")
+  var current = ("", "")
   while i < data.len:
     case data[i]
     of ':':
@@ -89,10 +87,7 @@ proc parseHeaders*(data: string, start: int): Option[HttpHeaders] =
       value = false
       current = ("", "")
     else:
-      if value:
-        current[1].add(data[i])
-      else:
-        current[0].add(data[i])
+      current[value.int].add(data[i])
     i.inc()
 
   return none(HttpHeaders)
@@ -113,10 +108,12 @@ iterator parseRequests*(data: string): int =
   ## This is only necessary for support of HTTP pipelining. The assumption
   ## is that there is a request at position `0`, and that there MAY be another
   ## request further in the data buffer.
+  let stop = len(data) - 3
+  # I dont know a better name for this
   var i = 0
   yield i
 
-  while i+3 < len(data):
+  while i < stop:
     if data[i+0] == '\c' and data[i+1] == '\l' and
        data[i+2] == '\c' and data[i+3] == '\l':
       if likely(i+4 == len(data)): break
