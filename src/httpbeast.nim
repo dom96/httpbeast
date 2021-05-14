@@ -54,8 +54,8 @@ const
 
 proc initSettings*(port: Port = Port(8080),
                    bindAddr: string = "",
-                   domain = Domain.AF_INET,
-                   numThreads: int = 0): Settings =
+                   numThreads: int = 0,
+                   domain = Domain.AF_INET): Settings =
 
   Settings(
     port: port,
