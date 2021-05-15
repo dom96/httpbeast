@@ -45,6 +45,7 @@ type
   Settings* = object
     port*: Port
     bindAddr*: string
+    domain*: Domain
     numThreads: int
     loggers: seq[Logger]
 
@@ -53,11 +54,13 @@ const
 
 proc initSettings*(port: Port = Port(8080),
                    bindAddr: string = "",
-                   numThreads: int = 0): Settings =
+                   numThreads: int = 0,
+                   domain = Domain.AF_INET): Settings =
 
   Settings(
     port: port,
     bindAddr: bindAddr,
+    domain: domain,
     numThreads: numThreads,
     loggers: getHandlers()
   )
@@ -280,7 +283,7 @@ proc eventLoop(params: (OnRequest, Settings)) =
 
   let selector = newSelector[Data]()
 
-  let server = newSocket()
+  let server = newSocket(settings.domain)
   server.setSockOpt(OptReuseAddr, true)
   server.setSockOpt(OptReusePort, true)
   server.bindAddr(settings.port, settings.bindAddr)
@@ -446,7 +449,7 @@ proc run*(onRequest: OnRequest) {.inline.} =
   ## request.
   ##
   ## See the other ``run`` proc for more info.
-  run(onRequest, Settings(port: Port(8080), bindAddr: ""))
+  run(onRequest, Settings(port: Port(8080), bindAddr: "", domain: Domain.AF_INET))
 
 when false:
   proc close*(port: Port) =
