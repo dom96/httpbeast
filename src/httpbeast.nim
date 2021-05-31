@@ -210,7 +210,7 @@ proc processEvents(selector: Selector[Data],
     of Client:
       if Event.Read in events[i].events:
         const size = 256
-        var buf: array[size, char]
+        var buf {.noinit.}: array[size, char]
         # Read until EAGAIN. We take advantage of the fact that the client
         # will wait for a response after they send a request. So we can
         # comfortably continue reading until the message ends with \c\l
