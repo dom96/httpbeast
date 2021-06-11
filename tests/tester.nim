@@ -1,4 +1,4 @@
-import asynctools, asyncdispatch, os, httpclient, strutils
+import asynctools, asyncdispatch, os, httpclient, strutils, asyncnet
 
 from osproc import execCmd
 
@@ -38,51 +38,74 @@ proc startServer(file: string) {.async.} =
   await sleepAsync(2000)
 
 proc tests() {.async.} =
-  await startServer("helloworld.nim")
+  # await startServer("helloworld.nim")
 
-  # Simple GET
+  # # Simple GET
+  # block:
+  #   let client = newAsyncHttpClient()
+  #   let resp = await client.get("http://localhost:8080/")
+  #   doAssert resp.code == Http200
+  #   let body = await resp.body
+  #   doAssert body == "Hello World"
+
+  # await startServer("dispatcher.nim")
+
+  # # Test 'await' usage in dispatcher.
+  # block:
+  #   let client = newAsyncHttpClient()
+  #   let resp = await client.get("http://localhost:8080")
+  #   doAssert resp.code == Http200
+  #   let body = await resp.body
+  #   doAssert body == "Hi there!"
+
+  # # Simple POST
+  # block:
+  #   let client = newAsyncHttpClient()
+  #   let resp = await client.post("http://localhost:8080", body="hello")
+  #   doAssert resp.code == Http200
+  #   let body = await resp.body
+  #   doAssert body == "Successful POST! Data=5"
+
+  # await startServer("simpleLog.nim")
+
+  # # Check that configured loggers are passed to each thread
+  # let logFilename = "tests/logFile.tmp"
+  # block:
+  #   let client = newAsyncHttpClient()
+  #   let resp = await client.get("http://localhost:8080")
+  #   doAssert resp.code == Http200
+  #   doAssert logFilename.readLines() == @["INFO Requested /"]
+
+  # block:
+  #   let client = newAsyncHttpClient()
+  #   let resp = await client.get("http://localhost:8080/404")
+  #   doAssert resp.code == Http404
+  #   doAssert logFilename.readLines(2) == @["INFO Requested /", "ERROR 404"]
+
+  # doAssert tryRemoveFile(logFilename)
+
+  # Verify cross-talk doesn't occur
+  await startServer("crosstalk.nim")
   block:
-    let client = newAsyncHttpClient()
-    let resp = await client.get("http://localhost:8080/")
-    doAssert resp.code == Http200
-    let body = await resp.body
-    doAssert body == "Hello World"
+    var client = newAsyncSocket()
+    await client.connect("localhost", Port(8080))
+    await client.send("GET /1 HTTP/1.1\c\l\c\l")
+    client.close()
 
-  await startServer("dispatcher.nim")
+    client = newAsyncSocket()
+    defer: client.close()
+    await client.connect("localhost", Port(8080))
+    await client.send("GET /2 HTTP/1.1\c\l\c\l")
 
-  # Test 'await' usage in dispatcher.
-  block:
-    let client = newAsyncHttpClient()
-    let resp = await client.get("http://localhost:8080")
-    doAssert resp.code == Http200
-    let body = await resp.body
-    doAssert body == "Hi there!"
+    doAssert (await client.recvLine()) == "HTTP/1.1 200 OK"
+    doAssert (await client.recvLine()) == "Content-Length: 10"
+    doAssert (await client.recvLine()).startsWith("Server")
+    doAssert (await client.recvLine()).startsWith("Date:")
+    doAssert (await client.recvLine()) == "\c\l"
+    let delayedBody = await client.recvLine()
+    doAssert(delayedBody == "Delayed /2", "We must get the ID we asked for.")
 
-  # Simple POST
-  block:
-    let client = newAsyncHttpClient()
-    let resp = await client.post("http://localhost:8080", body="hello")
-    doAssert resp.code == Http200
-    let body = await resp.body
-    doAssert body == "Successful POST! Data=5"
 
-  await startServer("simpleLog.nim")
-
-  # Check that configured loggers are passed to each thread
-  let logFilename = "tests/logFile.tmp"
-  block:
-    let client = newAsyncHttpClient()
-    let resp = await client.get("http://localhost:8080")
-    doAssert resp.code == Http200
-    doAssert logFilename.readLines() == @["INFO Requested /"]
-
-  block:
-    let client = newAsyncHttpClient()
-    let resp = await client.get("http://localhost:8080/404")
-    doAssert resp.code == Http404
-    doAssert logFilename.readLines(2) == @["INFO Requested /", "ERROR 404"]
-
-  doAssert tryRemoveFile(logFilename)
 
   echo("All good!")
 
