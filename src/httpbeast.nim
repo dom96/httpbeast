@@ -33,6 +33,8 @@ type
     ip: string
     ## Future for onRequest handler (may be nil).
     reqFut: Future[void]
+    ## Identifier for current request. Mainly for better detection of cross-talk.
+    requestID: uint
 
 type
   Request* = object
@@ -41,6 +43,8 @@ type
     # Determines where in the data buffer this request starts.
     # Only used for HTTP pipelining.
     start: int
+    # Identifier used to distinguish requests.
+    requestID: uint
 
   OnRequest* = proc (req: Request): Future[void] {.gcsafe.}
 
@@ -50,6 +54,8 @@ type
     domain*: Domain
     numThreads: int
     loggers: seq[Logger]
+
+  HttpBeastDefect* = ref object of Defect
 
 const
   serverInfo = "HttpBeast"
@@ -170,6 +176,13 @@ proc bodyInTransit(data: ptr Data): bool =
   assert(not (bodyLen > trueLen))
   return bodyLen != trueLen
 
+var requestCounter: uint = 0
+proc genRequestID(): uint =
+  if requestCounter == high(uint):
+    requestCounter = 0
+  requestCounter += 1
+  return requestCounter
+
 proc validateRequest(req: Request): bool {.gcsafe.}
 proc processEvents(selector: Selector[Data],
                    events: array[64, ReadyKey], count: int,
@@ -235,15 +248,18 @@ proc processEvents(selector: Selector[Data],
               for start in parseRequests(data.data):
                 # For pipelined requests, we need to reset this flag.
                 data.headersFinished = true
+                data.requestID = genRequestID()
 
                 let request = Request(
                   selector: selector,
                   client: fd.SocketHandle,
-                  start: start
+                  start: start,
+                  requestID: data.requestID,
                 )
 
                 template validateResponse(): untyped =
-                  data.headersFinished = false
+                  if data.requestID == request.requestID:
+                    data.headersFinished = false
 
                 if validateRequest(request):
                   data.reqFut = onRequest(request)
@@ -327,6 +343,10 @@ proc eventLoop(params: (OnRequest, Settings)) =
     if unlikely(asyncdispatch.getGlobalDispatcher().callbacks.len > 0):
       asyncdispatch.poll(0)
 
+template withRequestData(req: Request, body: untyped) =
+  let requestData {.inject.} = addr req.selector.getData(req.client)
+  body
+
 #[ API start ]#
 
 proc unsafeSend*(req: Request, data: string) {.inline.} =
@@ -339,7 +359,8 @@ proc unsafeSend*(req: Request, data: string) {.inline.} =
   ## careful when using it.
   if req.client notin req.selector:
     return
-  req.selector.getData(req.client).sendQueue.add(data)
+  withRequestData(req):
+    requestData.sendQueue.add(data)
   req.selector.updateHandle(req.client, {Event.Read, Event.Write})
 
 proc send*(req: Request, code: HttpCode, body: string, headers="") =
@@ -350,18 +371,19 @@ proc send*(req: Request, code: HttpCode, body: string, headers="") =
   if req.client notin req.selector:
     return
 
-  # TODO: Reduce the amount of `getData` accesses.
-  template getData: var Data = req.selector.getData(req.client)
-  assert getData.headersFinished, "Selector not ready to send."
+  withRequestData(req):
+    assert requestData.headersFinished, "Selector not ready to send."
+    if requestData.requestID != req.requestID:
+      raise HttpBeastDefect(msg: "You are attempting to send data to a stale request.")
 
-  let otherHeaders = if likely(headers.len == 0): "" else: "\c\L" & headers
-  var
-    text = (
-      "HTTP/1.1 $#\c\L" &
-      "Content-Length: $#\c\LServer: $#\c\LDate: $#$#\c\L\c\L$#"
-    ) % [$code, $body.len, serverInfo, serverDate, otherHeaders, body]
+    let otherHeaders = if likely(headers.len == 0): "" else: "\c\L" & headers
+    var
+      text = (
+        "HTTP/1.1 $#\c\L" &
+        "Content-Length: $#\c\LServer: $#\c\LDate: $#$#\c\L\c\L$#"
+      ) % [$code, $body.len, serverInfo, serverDate, otherHeaders, body]
 
-  getData.sendQueue.add(text)
+    requestData.sendQueue.add(text)
   req.selector.updateHandle(req.client, {Event.Read, Event.Write})
 
 proc send*(req: Request, code: HttpCode) =
@@ -416,6 +438,7 @@ proc forget*(req: Request) =
   ## This is useful when you want to register ``req.client`` in your own
   ## event loop, for example when wanting to integrate httpbeast into a
   ## websocket library.
+  assert req.selector.getData(req.client).requestID == req.requestID
   req.selector.unregister(req.client)
 
 proc validateRequest(req: Request): bool =

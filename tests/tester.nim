@@ -105,7 +105,24 @@ proc tests() {.async.} =
     let delayedBody = await client.recv(10)
     doAssert(delayedBody == "Delayed /2", "We must get the ID we asked for.")
 
+  block:
+    var client = newAsyncSocket()
+    await client.connect("localhost", Port(8080))
+    await client.send("GET /close_me/1 HTTP/1.1\c\l\c\l")
+    doAssert (await client.recv(1)) == ""
+    client.close()
 
+    client = newAsyncSocket()
+    defer: client.close()
+    await client.connect("localhost", Port(8080))
+    await client.send("GET /close_me/2 HTTP/1.1\c\l\c\l")
+    doAssert (await client.recvLine()) == "HTTP/1.1 200 OK"
+    doAssert (await client.recvLine()) == "Content-Length: 19"
+    doAssert (await client.recvLine()).startsWith("Server")
+    doAssert (await client.recvLine()).startsWith("Date:")
+    doAssert (await client.recvLine()) == "\c\l"
+    let delayedBody = await client.recv(19)
+    doAssert(delayedBody == "Delayed /close_me/2", "We must get the ID we asked for.")
 
   echo("All good!")
 
