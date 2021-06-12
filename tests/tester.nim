@@ -102,7 +102,7 @@ proc tests() {.async.} =
     doAssert (await client.recvLine()).startsWith("Server")
     doAssert (await client.recvLine()).startsWith("Date:")
     doAssert (await client.recvLine()) == "\c\l"
-    let delayedBody = await client.recvLine()
+    let delayedBody = await client.recv(10)
     doAssert(delayedBody == "Delayed /2", "We must get the ID we asked for.")
 
 

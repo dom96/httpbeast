@@ -31,6 +31,8 @@ type
     headersFinishPos: int
     ## The address that a `client` connects from.
     ip: string
+    ## Future for onRequest handler (may be nil).
+    reqFut: Future[void]
 
 type
   Request* = object
@@ -95,9 +97,22 @@ template handleClientClosure(selector: Selector[Data],
   # TODO: Logging that the socket was closed.
 
   # TODO: Can POST body be sent with Connection: Close?
+  var data: ptr Data = addr selector.getData(fd)
+  let isRequestComplete = data.reqFut.isNil or data.reqFut.finished
+  if isRequestComplete:
+    # The `onRequest` callback isn't in progress, so we can close the socket.
+    selector.unregister(fd)
+    fd.SocketHandle.close()
+  else:
+    # Close the socket only once the `onRequest` callback completes.
+    data.reqFut.addCallback(
+      proc (fut: Future[void]) =
+        fd.SocketHandle.close()
+    )
+    # Unregister fd so that we don't receive any more events for it.
+    # Once we do so the `data` will no longer be accessible.
+    selector.unregister(fd)
 
-  selector.unregister(fd)
-  fd.SocketHandle.close()
   when inLoop:
     break
   else:
@@ -231,12 +246,13 @@ proc processEvents(selector: Selector[Data],
                   data.headersFinished = false
 
                 if validateRequest(request):
-                  let fut = onRequest(request)
-                  if not fut.isNil:
-                    fut.callback =
-                      proc (theFut: Future[void]) =
-                        onRequestFutureComplete(theFut, selector, fd)
+                  data.reqFut = onRequest(request)
+                  if not data.reqFut.isNil:
+                    data.reqFut.addCallback(
+                      proc (fut: Future[void]) =
+                        onRequestFutureComplete(fut, selector, fd)
                         validateResponse()
+                    )
                   else:
                     validateResponse()
 
