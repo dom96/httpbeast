@@ -38,51 +38,51 @@ proc startServer(file: string) {.async.} =
   await sleepAsync(2000)
 
 proc tests() {.async.} =
-  # await startServer("helloworld.nim")
+  await startServer("helloworld.nim")
 
-  # # Simple GET
-  # block:
-  #   let client = newAsyncHttpClient()
-  #   let resp = await client.get("http://localhost:8080/")
-  #   doAssert resp.code == Http200
-  #   let body = await resp.body
-  #   doAssert body == "Hello World"
+  # Simple GET
+  block:
+    let client = newAsyncHttpClient()
+    let resp = await client.get("http://localhost:8080/")
+    doAssert resp.code == Http200
+    let body = await resp.body
+    doAssert body == "Hello World"
 
-  # await startServer("dispatcher.nim")
+  await startServer("dispatcher.nim")
 
-  # # Test 'await' usage in dispatcher.
-  # block:
-  #   let client = newAsyncHttpClient()
-  #   let resp = await client.get("http://localhost:8080")
-  #   doAssert resp.code == Http200
-  #   let body = await resp.body
-  #   doAssert body == "Hi there!"
+  # Test 'await' usage in dispatcher.
+  block:
+    let client = newAsyncHttpClient()
+    let resp = await client.get("http://localhost:8080")
+    doAssert resp.code == Http200
+    let body = await resp.body
+    doAssert body == "Hi there!"
 
-  # # Simple POST
-  # block:
-  #   let client = newAsyncHttpClient()
-  #   let resp = await client.post("http://localhost:8080", body="hello")
-  #   doAssert resp.code == Http200
-  #   let body = await resp.body
-  #   doAssert body == "Successful POST! Data=5"
+  # Simple POST
+  block:
+    let client = newAsyncHttpClient()
+    let resp = await client.post("http://localhost:8080", body="hello")
+    doAssert resp.code == Http200
+    let body = await resp.body
+    doAssert body == "Successful POST! Data=5"
 
-  # await startServer("simpleLog.nim")
+  await startServer("simpleLog.nim")
 
-  # # Check that configured loggers are passed to each thread
-  # let logFilename = "tests/logFile.tmp"
-  # block:
-  #   let client = newAsyncHttpClient()
-  #   let resp = await client.get("http://localhost:8080")
-  #   doAssert resp.code == Http200
-  #   doAssert logFilename.readLines() == @["INFO Requested /"]
+  # Check that configured loggers are passed to each thread
+  let logFilename = "tests/logFile.tmp"
+  block:
+    let client = newAsyncHttpClient()
+    let resp = await client.get("http://localhost:8080")
+    doAssert resp.code == Http200
+    doAssert logFilename.readLines() == @["INFO Requested /"]
 
-  # block:
-  #   let client = newAsyncHttpClient()
-  #   let resp = await client.get("http://localhost:8080/404")
-  #   doAssert resp.code == Http404
-  #   doAssert logFilename.readLines(2) == @["INFO Requested /", "ERROR 404"]
+  block:
+    let client = newAsyncHttpClient()
+    let resp = await client.get("http://localhost:8080/404")
+    doAssert resp.code == Http404
+    doAssert logFilename.readLines(2) == @["INFO Requested /", "ERROR 404"]
 
-  # doAssert tryRemoveFile(logFilename)
+  doAssert tryRemoveFile(logFilename)
 
   # Verify cross-talk doesn't occur
   await startServer("crosstalk.nim")
