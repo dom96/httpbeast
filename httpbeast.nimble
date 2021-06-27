@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.3.0"
+version       = "0.4.0"
 author        = "Dominik Picheta"
 description   = "A super-fast epoll-backed and parallel HTTP server."
 license       = "MIT"
@@ -15,6 +15,7 @@ requires "nim >= 0.18.0"
 # When https://github.com/cheatfate/asynctools/pull/28 is fixed,
 # change this back to normal asynctools
 requires "https://github.com/iffy/asynctools#pr_fix_for_latest"
+# requires "asynctools"
 
 task helloworld, "Compiles and executes the hello world server.":
   exec "nim c -d:release --gc:boehm -r tests/helloworld"
