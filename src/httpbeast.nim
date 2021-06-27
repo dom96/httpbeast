@@ -54,9 +54,10 @@ type
     domain*: Domain
     numThreads: int
     loggers: seq[Logger]
-    reusePort*: bool
+    reusePort*: Option[bool]
       # when false, will fail if --threads is passed or if 2
-      # processes bind to same address/port
+      # processes bind to same address/port. We use an Option to avoid
+      # breaking code that relies on `Settings(port: port)`
 
   HttpBeastDefect* = ref object of Defect
 
@@ -73,7 +74,7 @@ proc initSettings*(port: Port = Port(8080),
     domain: domain,
     numThreads: numThreads,
     loggers: getHandlers(),
-    reusePort: reusePort,
+    reusePort: some(reusePort),
   )
 
 proc initData(fdKind: FdKind, ip = ""): Data =
@@ -320,7 +321,7 @@ proc eventLoop(params: (OnRequest, Settings)) =
 
   let server = newSocket(settings.domain)
   server.setSockOpt(OptReuseAddr, true)
-  server.setSockOpt(OptReusePort, settings.reusePort)
+  server.setSockOpt(OptReusePort, settings.reusePort.get(true))
   server.bindAddr(settings.port, settings.bindAddr)
   server.listen()
   server.getFd().setBlocking(false)
