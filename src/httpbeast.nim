@@ -67,7 +67,7 @@ proc initSettings*(port: Port = Port(8080),
                    bindAddr: string = "",
                    numThreads: int = 0,
                    domain = Domain.AF_INET,
-                   reusePort = false): Settings =
+                   reusePort = true): Settings =
   Settings(
     port: port,
     bindAddr: bindAddr,
