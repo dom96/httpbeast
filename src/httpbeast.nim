@@ -54,10 +54,9 @@ type
     domain*: Domain
     numThreads: int
     loggers: seq[Logger]
-    reusePort*: Option[bool]
-      # when false, will fail if --threads is passed or if 2
-      # processes bind to same address/port. We use an Option to avoid
-      # breaking code that relies on `Settings(port: port)`
+    reusePort: bool
+      ## controlls whether to fail with "Address already in use".
+      ## This is currently ignored if multiple threads are spawned.
 
   HttpBeastDefect* = ref object of Defect
 
@@ -67,14 +66,15 @@ const
 proc initSettings*(port: Port = Port(8080),
                    bindAddr: string = "",
                    numThreads: int = 0,
-                   domain = Domain.AF_INET, reusePort = true): Settings =
+                   domain = Domain.AF_INET,
+                   reusePort = false): Settings =
   Settings(
     port: port,
     bindAddr: bindAddr,
     domain: domain,
     numThreads: numThreads,
     loggers: getHandlers(),
-    reusePort: some(reusePort),
+    reusePort: reusePort,
   )
 
 proc initData(fdKind: FdKind, ip = ""): Data =
@@ -321,7 +321,7 @@ proc eventLoop(params: (OnRequest, Settings)) =
 
   let server = newSocket(settings.domain)
   server.setSockOpt(OptReuseAddr, true)
-  server.setSockOpt(OptReusePort, settings.reusePort.get(true))
+  server.setSockOpt(OptReusePort, settings.reusePort)
   server.bindAddr(settings.port, settings.bindAddr)
   server.listen()
   server.getFd().setBlocking(false)
@@ -477,8 +477,13 @@ proc run*(onRequest: OnRequest, settings: Settings) =
     when compileOption("threads"):
       var threads = newSeq[Thread[(OnRequest, Settings)]](numThreads)
       for i in 0 ..< numThreads:
+        var settings2 = settings
+        if numThreads > 1: settings2.reusePort = true
+          # TODO: in future work, we can honor `reusePort = false` by
+          # attempting to bind to the port, and then on success spawn the threads
+          # with `reusePort = false`.
         createThread[(OnRequest, Settings)](
-          threads[i], eventLoop, (onRequest, settings)
+          threads[i], eventLoop, (onRequest, settings2)
         )
       echo("Listening on port ", settings.port) # This line is used in the tester to signal readiness.
       joinThreads(threads)
