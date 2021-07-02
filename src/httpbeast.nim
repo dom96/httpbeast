@@ -54,6 +54,9 @@ type
     domain*: Domain
     numThreads: int
     loggers: seq[Logger]
+    reusePort: bool
+      ## controls whether to fail with "Address already in use".
+      ## Setting this to false will raise when `threads` are on.
 
   HttpBeastDefect* = ref object of Defect
 
@@ -63,14 +66,15 @@ const
 proc initSettings*(port: Port = Port(8080),
                    bindAddr: string = "",
                    numThreads: int = 0,
-                   domain = Domain.AF_INET): Settings =
-
+                   domain = Domain.AF_INET,
+                   reusePort = true): Settings =
   Settings(
     port: port,
     bindAddr: bindAddr,
     domain: domain,
     numThreads: numThreads,
-    loggers: getHandlers()
+    loggers: getHandlers(),
+    reusePort: reusePort,
   )
 
 proc initData(fdKind: FdKind, ip = ""): Data =
@@ -317,7 +321,9 @@ proc eventLoop(params: (OnRequest, Settings)) =
 
   let server = newSocket(settings.domain)
   server.setSockOpt(OptReuseAddr, true)
-  server.setSockOpt(OptReusePort, true)
+  if compileOption("threads") and not settings.reusePort:
+    raise HttpBeastDefect(msg: "--threads:on requires reusePort to be enabled in settings")
+  server.setSockOpt(OptReusePort, settings.reusePort)
   server.bindAddr(settings.port, settings.bindAddr)
   server.listen()
   server.getFd().setBlocking(false)
@@ -488,7 +494,7 @@ proc run*(onRequest: OnRequest) {.inline.} =
   ## request.
   ##
   ## See the other ``run`` proc for more info.
-  run(onRequest, Settings(port: Port(8080), bindAddr: "", domain: Domain.AF_INET))
+  run(onRequest, initSettings(port=Port(8080), bindAddr="", domain=Domain.AF_INET))
 
 when false:
   proc close*(port: Port) =
