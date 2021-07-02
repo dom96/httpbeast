@@ -322,7 +322,7 @@ proc eventLoop(params: (OnRequest, Settings)) =
   let server = newSocket(settings.domain)
   server.setSockOpt(OptReuseAddr, true)
   if compileOption("threads") and not settings.reusePort:
-    raise newException(HttpBeastDefect, "--threads:on requires reusePort to be enabled in settings")
+    raise HttpBeastDefect(msg: "--threads:on requires reusePort to be enabled in settings")
   server.setSockOpt(OptReusePort, settings.reusePort)
   server.bindAddr(settings.port, settings.bindAddr)
   server.listen()
