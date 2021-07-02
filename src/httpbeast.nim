@@ -55,8 +55,8 @@ type
     numThreads: int
     loggers: seq[Logger]
     reusePort: bool
-      ## controlls whether to fail with "Address already in use".
-      ## This is currently ignored if multiple threads are spawned.
+      ## controls whether to fail with "Address already in use".
+      ## Setting this to false will raise when `threads` are on.
 
   HttpBeastDefect* = ref object of Defect
 
@@ -321,6 +321,8 @@ proc eventLoop(params: (OnRequest, Settings)) =
 
   let server = newSocket(settings.domain)
   server.setSockOpt(OptReuseAddr, true)
+  if compileOption("threads") and not settings.reusePort:
+    raise newException(HttpBeastDefect, "--threads:on requires reusePort to be enabled in settings")
   server.setSockOpt(OptReusePort, settings.reusePort)
   server.bindAddr(settings.port, settings.bindAddr)
   server.listen()
@@ -477,13 +479,8 @@ proc run*(onRequest: OnRequest, settings: Settings) =
     when compileOption("threads"):
       var threads = newSeq[Thread[(OnRequest, Settings)]](numThreads)
       for i in 0 ..< numThreads:
-        var settings2 = settings
-        if numThreads > 1: settings2.reusePort = true
-          # TODO: in future work, we can honor `reusePort = false` by
-          # attempting to bind to the port, and then on success spawn the threads
-          # with `reusePort = false`.
         createThread[(OnRequest, Settings)](
-          threads[i], eventLoop, (onRequest, settings2)
+          threads[i], eventLoop, (onRequest, settings)
         )
       echo("Listening on port ", settings.port) # This line is used in the tester to signal readiness.
       joinThreads(threads)
