@@ -54,9 +54,7 @@ type
     domain*: Domain
     numThreads: int
     loggers: seq[Logger]
-    reusePort: bool
-      ## controls whether to fail with "Address already in use".
-      ## Setting this to false will raise when `threads` are on.
+    reusePort: bool ## controls whether to fail with "Address already in use".
 
   HttpBeastDefect* = ref object of Defect
 
@@ -67,7 +65,7 @@ proc initSettings*(port: Port = Port(8080),
                    bindAddr: string = "",
                    numThreads: int = 0,
                    domain = Domain.AF_INET,
-                   reusePort = true): Settings =
+                   reusePort = false): Settings =
   Settings(
     port: port,
     bindAddr: bindAddr,
@@ -311,6 +309,12 @@ proc updateDate(fd: AsyncFD): bool =
   result = false # Returning true signifies we want timer to stop.
   serverDate = now().utc().format("ddd, dd MMM yyyy HH:mm:ss 'GMT'")
 
+proc newSocketAux(settings: Settings): owned(Socket) =
+  result = newSocket(settings.domain)
+  result.setSockOpt(OptReuseAddr, true)
+  result.setSockOpt(OptReusePort, settings.reusePort)
+  result.bindAddr(settings.port, settings.bindAddr)
+
 proc eventLoop(params: (OnRequest, Settings)) =
   let (onRequest, settings) = params
 
@@ -319,12 +323,7 @@ proc eventLoop(params: (OnRequest, Settings)) =
 
   let selector = newSelector[Data]()
 
-  let server = newSocket(settings.domain)
-  server.setSockOpt(OptReuseAddr, true)
-  if compileOption("threads") and not settings.reusePort:
-    raise HttpBeastDefect(msg: "--threads:on requires reusePort to be enabled in settings")
-  server.setSockOpt(OptReusePort, settings.reusePort)
-  server.bindAddr(settings.port, settings.bindAddr)
+  let server = newSocketAux(settings)
   server.listen()
   server.getFd().setBlocking(false)
   selector.registerHandle(server.getFd(), {Event.Read}, initData(Server))
@@ -477,12 +476,17 @@ proc run*(onRequest: OnRequest, settings: Settings) =
   echo("Starting ", numThreads, " threads")
   if numThreads > 1:
     when compileOption("threads"):
+      var settings2 = settings
+      if not settings.reusePort and numThreads > 1:
+        let server = newSocketAux(settings)
+        close(server) # binds to a temporary socket to honor `reusePort = false`
+        settings2.reusePort = true
       var threads = newSeq[Thread[(OnRequest, Settings)]](numThreads)
       for i in 0 ..< numThreads:
         createThread[(OnRequest, Settings)](
-          threads[i], eventLoop, (onRequest, settings)
+          threads[i], eventLoop, (onRequest, settings2)
         )
-      echo("Listening on port ", settings.port) # This line is used in the tester to signal readiness.
+      echo("Listening on port ", settings2.port) # This line is used in the tester to signal readiness.
       joinThreads(threads)
     else:
       assert false
