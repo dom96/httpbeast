@@ -54,11 +54,10 @@ type
     domain*: Domain
     numThreads: int
     loggers: seq[Logger]
-    reusePort: bool
-      ## controls whether to use `OptReusePort` for sockets
     failOnExistingPort: bool
       ## Fail with "Address already in use" if port is in use, by attempting
-      ## to bind to a temporary socket to fail early.
+      ## to bind to a temporary socket to fail early if `numThreads>1`, or
+      ## not setting `OptReusePort` if `numThreads==1`.
 
   HttpBeastDefect* = ref object of Defect
 
@@ -69,7 +68,6 @@ proc initSettings*(port: Port = Port(8080),
                    bindAddr: string = "",
                    numThreads: int = 0,
                    domain = Domain.AF_INET,
-                   reusePort = true,
                    failOnExistingPort = true): Settings =
   Settings(
     port: port,
@@ -77,7 +75,6 @@ proc initSettings*(port: Port = Port(8080),
     domain: domain,
     numThreads: numThreads,
     loggers: getHandlers(),
-    reusePort: reusePort,
     failOnExistingPort: failOnExistingPort,
   )
 
@@ -318,7 +315,7 @@ proc updateDate(fd: AsyncFD): bool =
 proc newSocketAux(settings: Settings): owned(Socket) =
   result = newSocket(settings.domain)
   result.setSockOpt(OptReuseAddr, true)
-  result.setSockOpt(OptReusePort, settings.reusePort)
+  result.setSockOpt(OptReusePort, not settings.failOnExistingPort)
   result.bindAddr(settings.port, settings.bindAddr)
 
 proc eventLoop(params: (OnRequest, Settings)) =
@@ -480,11 +477,11 @@ proc run*(onRequest: OnRequest, settings: Settings) =
     let numThreads = 1
 
   echo("Starting ", numThreads, " threads")
-  if settings.failOnExistingPort:
-    var settings2 = settings
-    settings2.reusePort = false
-    close(newSocketAux(settings2)) # attempt to bind to a temporary socket
   if numThreads > 1:
+    if settings.failOnExistingPort:
+      close(newSocketAux(settings)) # attempt to bind to a temporary socket
+    var settings = settings
+    settings.failOnExistingPort = false
     when compileOption("threads"):
       var threads = newSeq[Thread[(OnRequest, Settings)]](numThreads)
       for i in 0 ..< numThreads:
