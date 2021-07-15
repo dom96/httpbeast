@@ -54,7 +54,11 @@ type
     domain*: Domain
     numThreads: int
     loggers: seq[Logger]
-    reusePort: bool ## controls whether to fail with "Address already in use".
+    reusePort: bool
+      ## controls whether to use `OptReusePort` for sockets
+    failOnExistingPort: bool
+      ## Fail with "Address already in use" if port is in use, by attempting
+      ## to bind to a temporary socket to fail early.
 
   HttpBeastDefect* = ref object of Defect
 
@@ -65,7 +69,8 @@ proc initSettings*(port: Port = Port(8080),
                    bindAddr: string = "",
                    numThreads: int = 0,
                    domain = Domain.AF_INET,
-                   reusePort = false): Settings =
+                   reusePort = true,
+                   failOnExistingPort = true): Settings =
   Settings(
     port: port,
     bindAddr: bindAddr,
@@ -73,6 +78,7 @@ proc initSettings*(port: Port = Port(8080),
     numThreads: numThreads,
     loggers: getHandlers(),
     reusePort: reusePort,
+    failOnExistingPort: failOnExistingPort,
   )
 
 proc initData(fdKind: FdKind, ip = ""): Data =
@@ -474,19 +480,18 @@ proc run*(onRequest: OnRequest, settings: Settings) =
     let numThreads = 1
 
   echo("Starting ", numThreads, " threads")
+  if settings.failOnExistingPort:
+    var settings2 = settings
+    settings2.reusePort = false
+    close(newSocketAux(settings2)) # attempt to bind to a temporary socket
   if numThreads > 1:
     when compileOption("threads"):
-      var settings2 = settings
-      if not settings.reusePort and numThreads > 1:
-        let server = newSocketAux(settings)
-        close(server) # binds to a temporary socket to honor `reusePort = false`
-        settings2.reusePort = true
       var threads = newSeq[Thread[(OnRequest, Settings)]](numThreads)
       for i in 0 ..< numThreads:
         createThread[(OnRequest, Settings)](
-          threads[i], eventLoop, (onRequest, settings2)
+          threads[i], eventLoop, (onRequest, settings)
         )
-      echo("Listening on port ", settings2.port) # This line is used in the tester to signal readiness.
+      echo("Listening on port ", settings.port) # This line is used in the tester to signal readiness.
       joinThreads(threads)
     else:
       assert false
