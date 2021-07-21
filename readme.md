@@ -2,7 +2,7 @@
 
 A highly performant, multi-threaded HTTP 1.1 server written in Nim. 
 
-This is a project to get the fastest possible HTTP server written in pure Nim. It is currently in the [top 10 in the TechEmpower benchmarks](https://www.techempower.com/benchmarks/#section=data-r18&hw=ph&test=json).
+This is a project to get the fastest possible HTTP server written in pure Nim. In 2018 HttpBeast reached the [top 10 in the TechEmpower benchmarks](https://www.techempower.com/benchmarks/#section=data-r18&hw=ph&test=json).
 
 **Note:** This HTTP server does not support Windows.
 
