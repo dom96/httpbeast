@@ -369,7 +369,7 @@ proc unsafeSend*(req: Request, data: string) {.inline.} =
     requestData.sendQueue.add(data)
   req.selector.updateHandle(req.client, {Event.Read, Event.Write})
 
-proc send*(req: Request, code: HttpCode, body: string, headers="") =
+proc send*(req: Request, code: HttpCode, body: string, contentLength: Option[string], headers = "") {.inline.} =
   ## Responds with the specified HttpCode and body.
   ##
   ## **Warning:** This can only be called once in the OnRequest callback.
@@ -383,14 +383,25 @@ proc send*(req: Request, code: HttpCode, body: string, headers="") =
       raise HttpBeastDefect(msg: "You are attempting to send data to a stale request.")
 
     let otherHeaders = if likely(headers.len == 0): "" else: "\c\L" & headers
-    var
-      text = (
-        "HTTP/1.1 $#\c\L" &
-        "Content-Length: $#\c\LServer: $#\c\LDate: $#$#\c\L\c\L$#"
-      ) % [$code, $body.len, serverInfo, serverDate, otherHeaders, body]
+
+    let text = 
+      if contentLength.isNone:
+        (
+          "HTTP/1.1 $#\c\LContent-Length: $#\c\LServer: $#\c\LDate: $#$#\c\L\c\L$#"
+        ) % [$code, $body.len, serverInfo, serverDate, otherHeaders, body]
+      else:
+        (
+          "HTTP/1.1 $#\c\LContent-Length: $#\c\LServer: $#\c\LDate: $#$#\c\L\c\L$#"
+        ) % [$code, contentLength.get, serverInfo, serverDate, otherHeaders, body]
 
     requestData.sendQueue.add(text)
   req.selector.updateHandle(req.client, {Event.Read, Event.Write})
+
+proc send*(req: Request, code: HttpCode, body: string, headers="") =
+  ## Responds with the specified HttpCode and body.
+  ##
+  ## **Warning:** This can only be called once in the OnRequest callback.
+  req.send(code, body, none(string), headers)
 
 proc send*(req: Request, code: HttpCode) =
   ## Responds with the specified HttpCode. The body of the response
