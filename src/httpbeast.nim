@@ -384,15 +384,15 @@ proc send*(req: Request, code: HttpCode, body: string, contentLength: Option[str
 
     let otherHeaders = if likely(headers.len == 0): "" else: "\c\L" & headers
 
-    let text = 
+    let length =
       if contentLength.isNone:
-        (
-          "HTTP/1.1 $#\c\LContent-Length: $#\c\LServer: $#\c\LDate: $#$#\c\L\c\L$#"
-        ) % [$code, $body.len, serverInfo, serverDate, otherHeaders, body]
+        $body.len
       else:
-        (
+        contentLength.get
+
+    let text = (
           "HTTP/1.1 $#\c\LContent-Length: $#\c\LServer: $#\c\LDate: $#$#\c\L\c\L$#"
-        ) % [$code, contentLength.get, serverInfo, serverDate, otherHeaders, body]
+        ) % [$code, length, serverInfo, serverDate, otherHeaders, body]
 
     requestData.sendQueue.add(text)
   req.selector.updateHandle(req.client, {Event.Read, Event.Write})
