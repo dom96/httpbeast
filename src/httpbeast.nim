@@ -397,7 +397,7 @@ proc send*(req: Request, code: HttpCode, body: string, contentLength: Option[str
     requestData.sendQueue.add(text)
   req.selector.updateHandle(req.client, {Event.Read, Event.Write})
 
-proc send*(req: Request, code: HttpCode, body: string, headers="") =
+proc send*(req: Request, code: HttpCode, body: string, headers = "") =
   ## Responds with the specified HttpCode and body.
   ##
   ## **Warning:** This can only be called once in the OnRequest callback.
