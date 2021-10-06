@@ -57,6 +57,12 @@ type
     reusePort: bool
       ## controls whether to fail with "Address already in use".
       ## Setting this to false will raise when `threads` are on.
+    listenBacklog: cint
+      ## Sets the maximum allowed length of both Accept and SYN Queues.
+      ## Currently stdlib's listen() sets hard coded value SOMAXCONN, with the value
+      ## 4096 for Linux/AMD64 and 128 for others.
+      ##  * listen(2) Linux manual page: https://www.man7.org/linux/man-pages/man2/listen.2.html
+      ##  * SYN packet handling int the wild: https://blog.cloudflare.com/syn-packet-handling-in-the-wild/
 
   HttpBeastDefect* = ref object of Defect
 
@@ -67,7 +73,8 @@ proc initSettings*(port: Port = Port(8080),
                    bindAddr: string = "",
                    numThreads: int = 0,
                    domain = Domain.AF_INET,
-                   reusePort = true): Settings =
+                   reusePort = true,
+                   listenBacklog = SOMAXCONN): Settings =
   Settings(
     port: port,
     bindAddr: bindAddr,
@@ -75,6 +82,7 @@ proc initSettings*(port: Port = Port(8080),
     numThreads: numThreads,
     loggers: getHandlers(),
     reusePort: reusePort,
+    listenBacklog: listenBacklog,
   )
 
 proc initData(fdKind: FdKind, ip = ""): Data =
@@ -325,7 +333,7 @@ proc eventLoop(params: (OnRequest, Settings)) =
     raise HttpBeastDefect(msg: "--threads:on requires reusePort to be enabled in settings")
   server.setSockOpt(OptReusePort, settings.reusePort)
   server.bindAddr(settings.port, settings.bindAddr)
-  server.listen()
+  server.listen(settings.listenBacklog)
   server.getFd().setBlocking(false)
   selector.registerHandle(server.getFd(), {Event.Read}, initData(Server))
 
