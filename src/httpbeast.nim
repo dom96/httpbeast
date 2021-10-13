@@ -96,6 +96,9 @@ proc initData(fdKind: FdKind, ip = ""): Data =
       )
 
 template handleAccept() =
+  # A socket returned by accept4(2) will inherit TCP_NODELAY flag from the listening socket.
+  #   - https://github.com/h2o/h2o/pull/1568
+  #   - https://man.netbsd.org/tcp.4
   let (client, address) = fd.SocketHandle.accept()
   if client == osInvalidSocket:
     let lastError = osLastError()
@@ -333,6 +336,9 @@ proc eventLoop(params: (OnRequest, Settings)) =
     raise HttpBeastDefect(msg: "--threads:on requires reusePort to be enabled in settings")
   server.setSockOpt(OptReusePort, settings.reusePort)
   server.bindAddr(settings.port, settings.bindAddr)
+  # Disable Nagle Algorithm if the server socket is likely to be a TCP socket.
+  if settings.domain in {Domain.AF_INET, Domain.AF_INET6}:
+    server.setSockOpt(OptNoDelay, true, level=Protocol.IPPROTO_TCP.toInt)
   server.listen(settings.listenBacklog)
   server.getFd().setBlocking(false)
   selector.registerHandle(server.getFd(), {Event.Read}, initData(Server))
