@@ -95,8 +95,36 @@ proc initData(fdKind: FdKind, ip = ""): Data =
        ip: ip
       )
 
+# mostly ported from lib/pure/nativesockets.nim, except always sets O_NONBLOCK.
+proc acceptNonBlock(fd: SocketHandle, inheritable = defined(nimInheritHandles)): (SocketHandle, string) =
+  ## Accepts a new client connection.
+  ##
+  ## `inheritable` decides if the resulting SocketHandle can be inherited by
+  ## child processes.
+  ##
+  ## Returns (osInvalidSocket, "") if an error occurred.
+  var sockAddress: Sockaddr_in
+  var addrLen = sizeof(sockAddress).SockLen
+  var sock =
+    when (defined(linux) or defined(bsd)) and not defined(nimdoc):
+      accept4(fd, cast[ptr SockAddr](addr(sockAddress)), addr(addrLen),
+              if inheritable: O_NONBLOCK else: SOCK_CLOEXEC or O_NONBLOCK)
+    else:
+      accept(fd, cast[ptr SockAddr](addr(sockAddress)), addr(addrLen))
+  when declared(setInheritable) and not (defined(linux) or defined(bsd)):
+    if not setInheritable(sock, inheritable):
+      close sock
+      sock = osInvalidSocket
+    if sock != osInvalidSocket:
+      setBlocking(sock, false)
+  if sock == osInvalidSocket:
+    return (osInvalidSocket, "")
+  else:
+    return (sock, $inet_ntoa(sockAddress.sin_addr))
+
+
 template handleAccept() =
-  let (client, address) = fd.SocketHandle.accept()
+  let (client, address) = fd.SocketHandle.acceptNonBlock()
   if client == osInvalidSocket:
     let lastError = osLastError()
 
@@ -105,7 +133,6 @@ template handleAccept() =
       return
 
     raiseOSError(lastError)
-  setBlocking(client, false)
   selector.registerHandle(client, {Event.Read},
                           initData(Client, ip=address))
 
