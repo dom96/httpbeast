@@ -497,17 +497,15 @@ proc run*(onRequest: OnRequest, settings: Settings) =
   echo("Starting ", numThreads, " threads")
   if numThreads > 1:
     when compileOption("threads"):
-      var threads = newSeq[Thread[(OnRequest, Settings)]](numThreads)
-      for i in 0 ..< numThreads:
+      var threads = newSeq[Thread[(OnRequest, Settings)]](numThreads - 1)
+      for t in threads.mitems():
         createThread[(OnRequest, Settings)](
-          threads[i], eventLoop, (onRequest, settings)
+          t, eventLoop, (onRequest, settings)
         )
       echo("Listening on port ", settings.port) # This line is used in the tester to signal readiness.
-      joinThreads(threads)
     else:
       assert false
-  else:
-    eventLoop((onRequest, settings))
+  eventLoop((onRequest, settings))
 
 proc run*(onRequest: OnRequest) {.inline.} =
   ## Starts the HTTP server with default settings. Calls `onRequest` for each
