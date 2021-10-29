@@ -397,11 +397,17 @@ proc send*(req: Request, code: HttpCode, body: string, headers="") =
       raise HttpBeastDefect(msg: "You are attempting to send data to a stale request.")
 
     let otherHeaders = if likely(headers.len == 0): "" else: "\c\L" & headers
-    var
-      text = (
-        "HTTP/1.1 $#\c\L" &
-        "Content-Length: $#\c\LServer: $#\c\LDate: $#$#\c\L\c\L$#"
-      ) % [$code, $body.len, serverInfo, serverDate, otherHeaders, body]
+    var text = ""
+    text &= "HTTP/1.1 "
+    text &= $code
+    text &= "\c\LContent-Length: "
+    text &= $body.len
+    text &= "\c\LServer: " & serverInfo
+    text &= "\c\LDate: "
+    text &= serverDate
+    text &= otherHeaders
+    text &= "\c\L\c\L"
+    text &= body
 
     requestData.sendQueue.add(text)
   req.selector.updateHandle(req.client, {Event.Read, Event.Write})
