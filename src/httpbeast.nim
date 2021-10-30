@@ -397,7 +397,7 @@ proc send*(req: Request, code: HttpCode, body: string, headers="") =
       raise HttpBeastDefect(msg: "You are attempting to send data to a stale request.")
 
     let otherHeaders = if likely(headers.len == 0): "" else: "\c\L" & headers
-    var text = ""
+    var text = newStringOfCap(30 + body.len + serverInfo.len + serverDate.len + otherHeaders.len)
     text &= "HTTP/1.1 "
     text &= $code
     text &= "\c\LContent-Length: "
