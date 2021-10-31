@@ -2,6 +2,8 @@ import selectors, net, nativesockets, os, httpcore, asyncdispatch, strutils, pos
 import parseutils
 import options, future, logging
 
+from posix import ENOPROTOOPT
+
 from deques import len
 
 from osproc import countProcessors
@@ -335,6 +337,17 @@ proc eventLoop(params: (OnRequest, Settings)) =
   if compileOption("threads") and not settings.reusePort:
     raise HttpBeastDefect(msg: "--threads:on requires reusePort to be enabled in settings")
   server.setSockOpt(OptReusePort, settings.reusePort)
+  # Windows Subsystem for Linux doesn't support this flag, the only way to know
+  # is to retrieve its value it seems.
+  try:
+    discard server.getSockOpt(OptReusePort)
+  except OSError as e:
+    if e.errorCode == ENOPROTOOPT:
+      echo(
+        "SO_REUSEPORT not supported on this platform. HttpBeast will not utilise all threads."
+      )
+    else: raise
+
   server.bindAddr(settings.port, settings.bindAddr)
   # Disable Nagle Algorithm if the server socket is likely to be a TCP socket.
   if settings.domain in {Domain.AF_INET, Domain.AF_INET6}:
