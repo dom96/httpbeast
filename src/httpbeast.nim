@@ -1,6 +1,7 @@
 import selectors, net, nativesockets, os, httpcore, asyncdispatch, strutils, posix
 import parseutils
 import options, future, logging
+import macros
 
 from posix import ENOPROTOOPT
 
@@ -396,6 +397,18 @@ proc unsafeSend*(req: Request, data: string) {.inline.} =
     requestData.sendQueue.add(data)
   req.selector.updateHandle(req.client, {Event.Read, Event.Write})
 
+macro appendAll(vars: varargs[untyped]) =
+  assert vars.kind == nnkArgList
+  result = newStmtList()
+  for theVar in vars:
+    result.add(
+      quote do:
+        for c in `theVar`:
+          assert pos < requestData.sendQueue.len
+          requestData.sendQueue[pos] = c
+          pos.inc()
+    )
+
 proc send*(req: Request, code: HttpCode, body: string, headers="") =
   ## Responds with the specified HttpCode and body.
   ##
@@ -410,19 +423,25 @@ proc send*(req: Request, code: HttpCode, body: string, headers="") =
       raise HttpBeastDefect(msg: "You are attempting to send data to a stale request.")
 
     let otherHeaders = if likely(headers.len == 0): "" else: "\c\L" & headers
-    var text = newStringOfCap(30 + body.len + serverInfo.len + serverDate.len + otherHeaders.len)
-    text &= "HTTP/1.1 "
-    text &= $code
-    text &= "\c\LContent-Length: "
-    text &= $body.len
-    text &= "\c\LServer: " & serverInfo
-    text &= "\c\LDate: "
-    text &= serverDate
-    text &= otherHeaders
-    text &= "\c\L\c\L"
-    text &= body
+    let origLen = requestData.sendQueue.len
+    # We estimate how long the data we are adding will be. Keep this in mind
+    # if changing the format below.
+    let dataSize = body.len + otherHeaders.len + serverInfo.len + 120
+    requestData.sendQueue.setLen(origLen + dataSize)
+    var pos = origLen
+    let respCode = $code
+    let bodyLen = $body.len
 
-    requestData.sendQueue.add(text)
+    appendAll(
+      "HTTP/1.1 ", respCode,
+      "\c\LContent-Length: ", bodyLen,
+      "\c\LServer: ", serverInfo,
+      "\c\LDate: ", serverDate,
+      otherHeaders,
+      "\c\L\c\L",
+      body
+    )
+    requestData.sendQueue.setLen(pos)
   req.selector.updateHandle(req.client, {Event.Read, Event.Write})
 
 proc send*(req: Request, code: HttpCode) =
