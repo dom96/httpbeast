@@ -7,26 +7,33 @@ proc parseHttpMethod*(data: string, start: int): Option[HttpMethod] =
   # (RFC7230 3.1.1. "The request method is case-sensitive.")
   case data[start]
   of 'G':
-    if data[start+1] == 'E' and data[start+2] == 'T':
+    if data.high >= start+2 and
+       data[start+1] == 'E' and data[start+2] == 'T':
       return some(HttpGet)
   of 'H':
-    if data[start+1] == 'E' and data[start+2] == 'A' and data[start+3] == 'D':
+    if data.high >= start+3 and
+       data[start+1] == 'E' and data[start+2] == 'A' and data[start+3] == 'D':
       return some(HttpHead)
   of 'P':
-    if data[start+1] == 'O' and data[start+2] == 'S' and data[start+3] == 'T':
+    if data.high >= start+3 and
+       data[start+1] == 'O' and data[start+2] == 'S' and data[start+3] == 'T':
       return some(HttpPost)
-    if data[start+1] == 'U' and data[start+2] == 'T':
+    if data.high >= start+2 and
+       data[start+1] == 'U' and data[start+2] == 'T':
       return some(HttpPut)
-    if data[start+1] == 'A' and data[start+2] == 'T' and
+    if data.high >= start+4 and
+       data[start+1] == 'A' and data[start+2] == 'T' and
        data[start+3] == 'C' and data[start+4] == 'H':
       return some(HttpPatch)
   of 'D':
-    if data[start+1] == 'E' and data[start+2] == 'L' and
+    if data.high >= start+5 and
+       data[start+1] == 'E' and data[start+2] == 'L' and
        data[start+3] == 'E' and data[start+4] == 'T' and
        data[start+5] == 'E':
       return some(HttpDelete)
   of 'O':
-    if data[start+1] == 'P' and data[start+2] == 'T' and
+    if data.high >= start+6 and
+       data[start+1] == 'P' and data[start+2] == 'T' and
        data[start+3] == 'I' and data[start+4] == 'O' and
        data[start+5] == 'N' and data[start+6] == 'S':
       return some(HttpOptions)
