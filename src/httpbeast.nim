@@ -534,9 +534,9 @@ proc run*(onRequest: OnRequest, settings: Settings) =
         createThread[(OnRequest, Settings)](
           t, eventLoop, (onRequest, settings)
         )
-      echo("Listening on port ", settings.port) # This line is used in the tester to signal readiness.
     else:
       assert false
+  echo("Listening on port ", settings.port) # This line is used in the tester to signal readiness.
   eventLoop((onRequest, settings))
 
 proc run*(onRequest: OnRequest) {.inline.} =
