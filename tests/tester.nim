@@ -118,6 +118,7 @@ proc tests() {.async.} =
     let delayedBody = await client.recv(10)
     doAssert(delayedBody == "Delayed /2", "We must get the ID we asked for.")
 
+  await startServer("crosstalk.nim")
   block:
     var client = newAsyncSocket()
     await client.connect("localhost", Port(8080))
