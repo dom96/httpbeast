@@ -13,12 +13,13 @@ proc onRequest(req: Request): Future[void] =
     case req.path.get()
     of "/":
       info("Requested /")
-      flushFile(logFile)  # Only errors above lvlError auto-flush
       req.send("Hello World")
     else:
       info("Requested ", req.path.get())
       error("404")
       req.send(Http404)
+
+  flushFile(logFile)  # Only errors above lvlError auto-flush
 
 block:
   let settings = initSettings()
