@@ -8,19 +8,23 @@ proc nonAwaitedDelayedSend(req: Request, id: string) {.async.} =
   req.send("Delayed " & id)
 
 var lastFd = -1
-proc onRequest(req: Request) {.async.} =
+var nonClosedFirst = newFuture[void]()
+var closedFirst = newFuture[void]()
+proc onRequest(req: Request) {.async, gcsafe.} =
   if req.httpMethod == some(HttpGet):
     let id = req.path.get()
     case id
     of "/":
       req.send("Immediate")
     of "/1", "/2":
-      # TODO: Can we replace this sleep?
-      await sleepAsync(1_000)
+      if id == "/1":
+        await nonClosedFirst
+      else:
+        nonClosedFirst.complete()
       echo("Sleep finished, responding to request ", id)
       req.send("Delayed " & id)
     of "/close_me/1", "/close_me/2":
-      # To reproduce this bug we expect the OS to reuse the OS.
+      # To reproduce this bug we expect the OS to reuse the FDs.
       if lastFd == -1:
         lastFd = req.client.int
       else:
@@ -32,7 +36,9 @@ proc onRequest(req: Request) {.async.} =
       if id.endsWith("/1"):
         req.forget()
         req.client.close()
-      await sleepAsync(1_000)
+        await closedFirst
+      else:
+        closedFirst.complete()
       echo("Sleep finished, responding to request ", id)
       try:
         req.send("Delayed " & id)
