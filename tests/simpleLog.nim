@@ -16,6 +16,7 @@ proc onRequest(req: Request): Future[void] =
       flushFile(logFile)  # Only errors above lvlError auto-flush
       req.send("Hello World")
     else:
+      info("Requested ", req.path.get())
       error("404")
       req.send(Http404)
 

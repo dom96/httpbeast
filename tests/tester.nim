@@ -86,11 +86,14 @@ proc tests() {.async.} =
     check resp.code == Http200
     check logFilename.readLines() == @["INFO Requested /"]
 
+  check tryRemoveFile(logFilename)
+  await startServer("simpleLog.nim")
+
   block:
     let client = newAsyncHttpClient()
     let resp = await client.get("http://localhost:8080/404")
     check resp.code == Http404
-    check logFilename.readLines(2) == @["INFO Requested /", "ERROR 404"]
+    check logFilename.readLines(2) == @["INFO Requested /404", "ERROR 404"]
 
   check tryRemoveFile(logFilename)
 
