@@ -191,7 +191,6 @@ proc bodyInTransit(data: ptr Data): bool =
   var trueLen = parseContentLength(data.data, start=0)
 
   let bodyLen = data.data.len - data.headersFinishPos
-  assert(not (bodyLen > trueLen))
   return bodyLen != trueLen
 
 var requestCounter: uint = 0
