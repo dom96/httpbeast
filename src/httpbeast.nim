@@ -188,10 +188,10 @@ proc bodyInTransit(data: ptr Data): bool =
 
   if data.headersFinishPos == -1: return false
 
-  var trueLen = parseContentLength(data.data, start=0)
+  var headerContentLength = parseContentLength(data.data, start=0)
 
   let bodyLen = data.data.len - data.headersFinishPos
-  return bodyLen != trueLen
+  return bodyLen != headerContentLength
 
 var requestCounter: uint = 0
 proc genRequestID(): uint =
@@ -475,14 +475,6 @@ proc body*(req: Request): Option[string] =
   result = req.selector.getData(req.client).data[
     pos .. ^1
   ].some()
-
-  when not defined(release):
-    let length =
-      if req.headers.get().hasKey("Content-Length"):
-        req.headers.get()["Content-Length"].parseInt()
-      else:
-        0
-    assert result.get().len == length
 
 proc ip*(req: Request): string =
   ## Retrieves the IP address that the request was made from.
