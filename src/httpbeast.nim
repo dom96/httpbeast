@@ -275,20 +275,21 @@ proc processEvents(selector: Selector[Data],
                   requestID: data.requestID,
                 )
 
-                template validateResponse(): untyped =
-                  if data.requestID == request.requestID:
-                    data.headersFinished = false
+                template validateResponse(capturedData: ptr Data): untyped =
+                  if capturedData.requestID == request.requestID:
+                    capturedData.headersFinished = false
 
                 if validateRequest(request):
                   data.reqFut = onRequest(request)
                   if not data.reqFut.isNil:
-                    data.reqFut.addCallback(
-                      proc (fut: Future[void]) =
-                        onRequestFutureComplete(fut, selector, fd)
-                        validateResponse()
-                    )
+                    capture data:
+                      data.reqFut.addCallback(
+                        proc (fut: Future[void]) =
+                          onRequestFutureComplete(fut, selector, fd)
+                          validateResponse(data)
+                      )
                   else:
-                    validateResponse()
+                    validateResponse(data)
 
           if ret != size:
             # Assume there is nothing else for us right now and break.
@@ -413,12 +414,11 @@ proc send*(req: Request, code: HttpCode, body: string, headers="") =
   ## Responds with the specified HttpCode and body.
   ##
   ## **Warning:** This can only be called once in the OnRequest callback.
-
   if req.client notin req.selector:
     return
 
   withRequestData(req):
-    assert requestData.headersFinished, "Selector not ready to send."
+    assert requestData.headersFinished, "Selector for $1 not ready to send." % $req.client.int
     if requestData.requestID != req.requestID:
       raise HttpBeastDefect(msg: "You are attempting to send data to a stale request.")
 
