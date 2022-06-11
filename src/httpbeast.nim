@@ -55,12 +55,14 @@ type
     port*: Port
     bindAddr*: string
     domain*: Domain
-    numThreads: int
-    loggers: seq[Logger]
-    reusePort: bool
+    numThreads*: int
+    loggers*: seq[Logger]
+      ## a list of loggers to add to any newly created threads.
+      ## This is automatically populated in `initSettings`.
+    reusePort*: bool
       ## controls whether to fail with "Address already in use".
       ## Setting this to false will raise when `threads` are on.
-    listenBacklog: cint
+    listenBacklog*: cint
       ## Sets the maximum allowed length of both Accept and SYN Queues.
       ## Currently stdlib's listen() sets hard coded value SOMAXCONN, with the value
       ## 4096 for Linux/AMD64 and 128 for others.
@@ -326,11 +328,15 @@ proc updateDate(fd: AsyncFD): bool =
   result = false # Returning true signifies we want timer to stop.
   serverDate = now().utc().format("ddd, dd MMM yyyy HH:mm:ss 'GMT'")
 
-proc eventLoop(params: (OnRequest, Settings)) =
-  let (onRequest, settings) = params
+proc eventLoop(
+  params: tuple[onRequest: OnRequest, settings: Settings, isMainThread: bool]
+) =
+  let (onRequest, settings, isMainThread) = params
 
-  for logger in settings.loggers:
-    addHandler(logger)
+  if not isMainThread:
+    # We are on a new thread. Re-add the loggers from the main thread.
+    for logger in settings.loggers:
+      addHandler(logger)
 
   let selector = newSelector[Data]()
 
@@ -529,15 +535,15 @@ proc run*(onRequest: OnRequest, settings: Settings) =
   echo("Starting ", numThreads, " threads")
   if numThreads > 1:
     when compileOption("threads"):
-      var threads = newSeq[Thread[(OnRequest, Settings)]](numThreads - 1)
+      var threads = newSeq[Thread[(OnRequest, Settings, bool)]](numThreads - 1)
       for t in threads.mitems():
-        createThread[(OnRequest, Settings)](
-          t, eventLoop, (onRequest, settings)
+        createThread[(OnRequest, Settings, bool)](
+          t, eventLoop, (onRequest, settings, false)
         )
     else:
       assert false
   echo("Listening on port ", settings.port) # This line is used in the tester to signal readiness.
-  eventLoop((onRequest, settings))
+  eventLoop((onRequest, settings, true))
 
 proc run*(onRequest: OnRequest) {.inline.} =
   ## Starts the HTTP server with default settings. Calls `onRequest` for each
