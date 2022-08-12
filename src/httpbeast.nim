@@ -1,6 +1,6 @@
 import selectors, net, nativesockets, os, httpcore, asyncdispatch, strutils, posix
 import parseutils
-import options, future, logging
+import options, sugar, logging
 import macros
 
 from posix import ENOPROTOOPT
