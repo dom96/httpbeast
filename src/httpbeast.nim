@@ -243,7 +243,7 @@ proc processEvents(selector: Selector[Data],
           if ret == -1:
             # Error!
             let lastError = osLastError()
-            if lastError.int32 in {EWOULDBLOCK, EAGAIN}:
+            if lastError.int32 in [EWOULDBLOCK, EAGAIN]:
               break
             if isDisconnectionError({SocketFlag.SafeDisconn}, lastError):
               handleClientClosure(selector, fd)
