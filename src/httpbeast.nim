@@ -495,6 +495,10 @@ proc ip*(req: Request): string =
   ## Retrieves the IP address that the request was made from.
   req.selector.getData(req.client).ip
 
+proc id*(req: Request): uint =
+  ## Retrieves the ID of the request
+  req.requestID
+
 proc forget*(req: Request) =
   ## Unregisters the underlying request's client socket from httpbeast's
   ## event loop.
