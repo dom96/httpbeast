@@ -51,6 +51,8 @@ type
 
   OnRequest* = proc (req: Request): Future[void] {.gcsafe.}
 
+  Startup = proc () {.closure, gcsafe.}
+
   Settings* = object
     port*: Port
     bindAddr*: string
@@ -68,15 +70,23 @@ type
       ## 4096 for Linux/AMD64 and 128 for others.
       ##  * listen(2) Linux manual page: https://www.man7.org/linux/man-pages/man2/listen.2.html
       ##  * SYN packet handling int the wild: https://blog.cloudflare.com/syn-packet-handling-in-the-wild/
+    startup: Startup
+      ## An optional callback can be provided to execute at the beginning of 
+      ## the `eventLoop` function for initializing thread variables or performing other related tasks.
 
   HttpBeastDefect* = ref object of Defect
 
 const
   serverInfo = "HttpBeast"
 
+proc doNothing(): Startup {.gcsafe.} =
+  result = proc () {.closure, gcsafe.} =
+    discard
+
 proc initSettings*(port: Port = Port(8080),
                    bindAddr: string = "",
                    numThreads: int = 0,
+                   startup: Startup = doNothing(),
                    domain = Domain.AF_INET,
                    reusePort = true,
                    listenBacklog = SOMAXCONN): Settings =
@@ -88,6 +98,7 @@ proc initSettings*(port: Port = Port(8080),
     loggers: getHandlers(),
     reusePort: reusePort,
     listenBacklog: listenBacklog,
+    startup: startup
   )
 
 proc initData(fdKind: FdKind, ip = ""): Data =
@@ -332,6 +343,9 @@ proc eventLoop(
   params: tuple[onRequest: OnRequest, settings: Settings, isMainThread: bool]
 ) =
   let (onRequest, settings, isMainThread) = params
+
+  if settings.startup != nil:
+    settings.startup()
 
   if not isMainThread:
     # We are on a new thread. Re-add the loggers from the main thread.
