@@ -3,6 +3,7 @@ import parseutils
 import options, sugar, logging
 import macros
 import std/exitprocs
+import system / ansi_c
 
 from posix import ENOPROTOOPT
 
@@ -561,7 +562,13 @@ proc run*(onRequest: OnRequest, settings: Settings) =
         )
       addExitProc(proc() =
         for thr in threads:
-          discard pthread_cancel(thr.sys)
+          when compiles(pthread_cancel(thr.sys)):
+            discard pthread_cancel(thr.sys)
+          if not isNil(thr.core):
+            when defined(gcDestructors):
+              c_free(thr.core)
+            else:
+              deallocShared(thr.core)
       )
     else:
       assert false
