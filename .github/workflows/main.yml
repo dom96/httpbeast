@@ -26,5 +26,5 @@ jobs:
         nimversion: ${{ matrix.nimversion }}
     - name: Test
       run: |
-        nimble test
+        nimble -y test
         nimble refresh
