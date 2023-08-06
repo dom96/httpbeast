@@ -2,6 +2,7 @@ import selectors, net, nativesockets, os, httpcore, asyncdispatch, strutils, pos
 import parseutils
 import options, sugar, logging
 import macros
+import std/exitprocs
 
 from posix import ENOPROTOOPT
 
@@ -558,6 +559,10 @@ proc run*(onRequest: OnRequest, settings: Settings) =
         createThread[(OnRequest, Settings, bool)](
           t, eventLoop, (onRequest, settings, false)
         )
+      addExitProc(proc() =
+        for thr in threads:
+          discard pthread_cancel(thr.sys)
+      )
     else:
       assert false
   echo("Listening on port ", settings.port) # This line is used in the tester to signal readiness.
