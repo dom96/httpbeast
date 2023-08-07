@@ -560,16 +560,16 @@ proc run*(onRequest: OnRequest, settings: Settings) =
         createThread[(OnRequest, Settings, bool)](
           t, eventLoop, (onRequest, settings, false)
         )
-      addExitProc(proc() =
-        for thr in threads:
-          when compiles(pthread_cancel(thr.sys)):
+      when NimMajor >= 2:
+        addExitProc(proc() =
+          for thr in threads:
             discard pthread_cancel(thr.sys)
-          if not isNil(thr.core):
-            when defined(gcDestructors):
-              c_free(thr.core)
-            else:
-              deallocShared(thr.core)
-      )
+            if not isNil(thr.core):
+              when defined(gcDestructors):
+                c_free(thr.core)
+              else:
+                deallocShared(thr.core)
+        )
     else:
       assert false
   echo("Listening on port ", settings.port) # This line is used in the tester to signal readiness.
