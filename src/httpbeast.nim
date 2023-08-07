@@ -563,7 +563,8 @@ proc run*(onRequest: OnRequest, settings: Settings) =
       when NimMajor >= 2:
         addExitProc(proc() =
           for thr in threads:
-            discard pthread_cancel(thr.sys)
+            when compiles(pthread_cancel(thr.sys)):
+              discard pthread_cancel(thr.sys)
             if not isNil(thr.core):
               when defined(gcDestructors):
                 c_free(thr.core)
