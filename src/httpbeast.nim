@@ -477,6 +477,10 @@ proc send*(req: Request, body: string, code = Http200) {.inline.} =
   ## **Warning:** This can only be called once in the OnRequest callback.
   req.send(code, body)
 
+proc send*(req: Request, body: string, headers: string, code = Http200) =
+  ## Sends a HTTP 200 OK response with the specified body and headers.
+  req.send(code, body, headers)
+
 proc httpMethod*(req: Request): Option[HttpMethod] {.inline.} =
   ## Parses the request's data to find the request HttpMethod.
   parseHttpMethod(req.selector.getData(req.client).data, req.start)
