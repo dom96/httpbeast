@@ -61,3 +61,9 @@ run(onRequest)
 ```
 
 Run via: `nimble c -r helloHttp.nim`
+
+## Security Concern
+**Caution:** 
+Any project using HttpBeast should be deployed behind a secure reverse proxy to ensure consistent and secure handling of incoming requests.
+
+>Exposing HttpBeast project to the public internet without a reverse proxy exposes it to the risk of HTTP Request Smuggling attacks. This technique can manipulate the interpretation of HTTP requests, potentially leading to unauthorized access or data breaches.
