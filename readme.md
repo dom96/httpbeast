@@ -6,7 +6,9 @@ The main goal of this project is performance, when it was started the goal was t
 
 > :information_source: Unless you know what you're doing (for example writing something resource constrained or your own web framework), you are better off using [Jester](https://github.com/dom96/jester) (which is built on Httpbeast) or another web framework.
 
-> :warning: This HTTP server has been designed to utilise epoll-like OS APIs and as such does not support Windows by-design.
+> :information_source: This HTTP server has been designed to utilise epoll-like OS APIs and as such does not support Windows by-design.
+
+> :warning: This library is not yet hardened against common HTTP security exploits. If you're using it in production you should do so behind a reverse proxy like nginx.
 
 ## Features
 
